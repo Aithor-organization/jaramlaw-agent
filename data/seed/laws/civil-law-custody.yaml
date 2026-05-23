@@ -1,0 +1,14 @@
+law_id: civil-law-custody
+law_name: 민법
+article: 제837조-제837조의2
+title: 면접교섭권 및 양육비 부담
+effective_date: "2024-01-01"
+text_summary: |
+  자(子)를 직접 양육하지 아니하는 부모의 일방은 면접교섭권을 가진다.
+  자녀가 만 13세 이상인 경우 자녀의 의사를 존중하여 면접교섭의 시간·장소·방법을 정한다.
+  이혼 시 부모는 협의로 자녀의 양육에 관한 사항(양육자 결정, 양육비 부담, 면접교섭권 행사 여부 등)을 정하여야 하며, 협의가 불가능한 경우 가정법원이 정한다.
+applies_to_personas: ["P3"]
+applies_to_life_stages: ["all"]
+tags: ["custody", "visitation", "이혼", "면접교섭", "양육권"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001687"
+contact: "가정법원 1566-2100"

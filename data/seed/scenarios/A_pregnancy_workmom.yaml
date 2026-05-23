@@ -1,0 +1,48 @@
+scenario_id: A
+scenario_name: 둘째 임신 + 첫째 4세 워킹맘
+persona: P1
+reference_date: "2026-05-24"
+description: |
+  김지원 (32세, 워킹맘, 서울 마포). 24개월 아들 첫째, 둘째 임신 12주.
+  자람법에 가족 프로필을 입력하여 지원 매칭, 권리 카드, 캘린더, 체크리스트를 받는다.
+
+family_profile:
+  parents:
+    - role: mother
+      age: 32
+      employment: "정규직 (대기업, IT)"
+      region_code: "11440"  # 서울 마포구
+    - role: father
+      age: 34
+      employment: "정규직 (중소기업)"
+      region_code: "11440"
+  children:
+    - name_masked: "C1"
+      birth_date: "2024-05-15"  # 24개월
+      sex: "M"
+      facility: "어린이집"
+    - name_masked: "C2"
+      expected_birth_date: "2026-12-15"
+      pregnancy_week: 12
+      sex: "unknown"
+  events:
+    - type: "pregnancy"
+      date: "2026-09-15"
+  flags:
+    - "second_child"
+    - "second_child_pregnancy"
+    - "working_mom"
+    - "dual_income"
+
+scenario:
+  type: "general"
+  query: "둘째 임신했어요. 받을 수 있는 지원이 뭐가 있나요? 출산휴가/육아휴직은 어떻게 신청해야 하나요?"
+  data: {}
+
+expected_outputs:
+  support_matches_min: 4  # 현 시점 매칭 (출산축하금, 아동수당, 출산휴가, 육아휴직급여). 부모급여/첫만남이용권은 둘째 출생 후 자격 발생
+  rights_cards_min: 4     # 최소 4개 권리카드 (출산휴가, 배우자출산휴가, 육아휴직, 태아검진휴가)
+  calendar_events_min: 8  # 영유아 건강검진 + 예방접종 + 출산 D-day + 부모급여 전환
+  draft_documents_min: 0  # 시나리오 A는 분쟁 없음 — 신청서 미생성 (가능)
+  safety_routing_triggered: false
+  unverifiable_claims_max: 0

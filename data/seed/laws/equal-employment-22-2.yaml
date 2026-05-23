@@ -1,0 +1,17 @@
+law_id: equal-employment-22-2
+law_name: 남녀고용평등과 일·가정 양립 지원에 관한 법률
+article: 제22조의2
+title: 가족돌봄휴가
+effective_date: "2020-01-01"
+text_summary: |
+  사업주는 근로자가 조부모, 부모, 배우자, 배우자의 부모, 자녀 또는 손자녀의 질병, 사고, 노령으로 인하여 그 가족을 돌보기 위한 휴가(가족돌봄휴가)를 신청하는 경우 이를 허용하여야 한다.
+  가족돌봄휴가는 연간 최대 10일(자녀 양육 사유는 추가 10일) 사용 가능하며, 1일 단위로 분할 사용할 수 있다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["all"]
+tags: ["family-care", "가족돌봄휴가"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["family-care-leave"]
+violation_penalty:
+  description: "가족돌봄휴가 거부 시"
+  penalty: "500만원 이하 과태료"
+  report_channel: "고용노동부 1350"

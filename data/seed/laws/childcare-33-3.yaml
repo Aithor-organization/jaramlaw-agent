@@ -1,0 +1,17 @@
+law_id: childcare-33-3
+law_name: 영유아보육법
+article: 제33조의3
+title: 어린이집의 안전사고 보고 등
+effective_date: "2024-01-01"
+text_summary: |
+  어린이집의 원장은 보육 중인 영유아에게 안전사고 등이 발생한 경우 즉시 보호자에게 알리고, 사고의 경위·결과 등을 기록하여 보건복지부령이 정하는 바에 따라 시장·군수·구청장에게 보고하여야 한다.
+  안전사고 보고서에는 사고 일시·장소·경위·응급조치 사항·후속 조치 사항 등이 포함되어야 한다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool"]
+tags: ["daycare", "safety", "accident-report", "영유아보육", "안전사고"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001948"
+related_rights_cards: ["daycare-safety-report"]
+violation_penalty:
+  description: "안전사고 보고 의무 위반 시"
+  penalty: "300만원 이하 과태료 (영유아보육법 제56조)"
+  report_channel: "거주지 시·군·구 보육과"

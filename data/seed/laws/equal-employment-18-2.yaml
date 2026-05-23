@@ -1,0 +1,19 @@
+law_id: equal-employment-18-2
+law_name: 남녀고용평등과 일·가정 양립 지원에 관한 법률
+article: 제18조의2
+title: 배우자 출산휴가
+effective_date: "2025-02-23"
+text_summary: |
+  사업주는 근로자가 배우자의 출산을 이유로 휴가(이하 "배우자 출산휴가")를 청구하는 경우에 20일의 휴가를 주어야 한다.
+  이 경우 사용된 휴가기간은 유급으로 한다. 다만, 출산전후휴가급여 등이 지급된 경우에는 그 금액의 한도에서 사업주는 지급의 책임을 면한다.
+  배우자 출산휴가는 근로자의 배우자가 출산한 날부터 120일이 지나면 청구할 수 없다.
+  배우자 출산휴가는 4회에 나누어 사용할 수 있다.
+applies_to_personas: ["P1-father", "P2-father"]
+applies_to_life_stages: ["pregnancy", "infant"]
+tags: ["paternity", "spouse-birth", "배우자출산휴가"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["spouse-birth-leave"]
+violation_penalty:
+  description: "배우자 출산휴가 거부 시"
+  penalty: "500만원 이하 과태료 (남녀고용평등법 제39조)"
+  report_channel: "고용노동부 1350"

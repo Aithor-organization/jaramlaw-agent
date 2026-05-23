@@ -1,0 +1,14 @@
+law_id: itnet-31
+law_name: 정보통신망 이용촉진 및 정보보호 등에 관한 법률
+article: 제31조
+title: 법정대리인의 권리
+effective_date: "2024-08-01"
+text_summary: |
+  정보통신서비스 제공자는 만 14세 미만의 아동으로부터 개인정보를 수집·이용·제공하려는 경우에는 그 법정대리인의 동의를 받아야 한다.
+  법정대리인은 만 14세 미만 아동의 개인정보 열람·정정·삭제 등을 요구할 수 있으며, 정보통신서비스 제공자는 정당한 사유 없이 거부할 수 없다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool", "elementary", "middle"]
+tags: ["minor-consent", "privacy", "14세미만", "법정대리인"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001770"
+related_rights_cards: ["minor-consent-14"]
+notes: "AI 기본법 시행(2026.1)으로 미성년 SNS/생성형 AI 이용 시 보강"

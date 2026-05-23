@@ -1,0 +1,18 @@
+law_id: childcare-15-5
+law_name: 영유아보육법
+article: 제15조의5
+title: 폐쇄회로 텔레비전의 설치 등
+effective_date: "2023-06-15"
+text_summary: |
+  어린이집을 설치·운영하는 자는 보육실 등 어린이집 내부 영상정보처리기기(CCTV)를 설치·관리하여야 한다.
+  보호자는 보육 중 안전사고 또는 아동학대가 의심되는 경우 등 영상정보 열람을 요청할 수 있으며, 어린이집 운영자는 정당한 사유 없이 거부할 수 없다.
+  영상정보는 60일 이상 보관하여야 한다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool"]
+tags: ["daycare", "cctv", "안전사고", "아동학대"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001948"
+related_rights_cards: ["daycare-cctv-access"]
+violation_penalty:
+  description: "정당한 사유 없이 CCTV 열람 거부 시"
+  penalty: "500만원 이하 과태료"
+  report_channel: "거주지 시·군·구 보육과"

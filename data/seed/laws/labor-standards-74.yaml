@@ -1,0 +1,20 @@
+law_id: labor-standards-74
+law_name: 근로기준법
+article: 제74조
+title: 임산부의 보호
+effective_date: "2024-10-22"
+text_summary: |
+  사용자는 임신 중의 여성에게 출산 전과 후를 통하여 90일(다태아의 경우 120일)의 출산휴가를 주어야 한다.
+  이 경우 휴가 기간의 배정은 출산 후에 45일(다태아의 경우 60일) 이상이 되어야 한다.
+applies_to_personas: ["P1-mother", "P2-mother", "P3"]
+applies_to_life_stages: ["pregnancy"]
+tags: ["maternity", "pregnancy", "work-leave", "출산휴가"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["maternity-leave-90d"]
+exceptions:
+  - "다태아의 경우 120일 (출산 후 60일 이상)"
+  - "임신 16주 이후 유산·사산 시 별도 휴가"
+violation_penalty:
+  description: "출산휴가 거부 시"
+  penalty: "2년 이하 징역 또는 2천만원 이하 벌금 (근로기준법 제110조)"
+  report_channel: "고용노동부 1350"

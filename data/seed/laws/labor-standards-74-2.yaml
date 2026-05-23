@@ -1,0 +1,16 @@
+law_id: labor-standards-74-2
+law_name: 근로기준법
+article: 제74조의2
+title: 태아검진 시간의 허용 등
+effective_date: "2008-12-19"
+text_summary: |
+  사용자는 임신한 여성근로자가 모자보건법 제10조에 따른 임산부 정기건강진단을 받는 데 필요한 시간을 청구하는 경우 이를 허용하여야 한다.
+  사용자는 임신한 여성근로자가 청구한 건강진단 시간을 이유로 그 근로자의 임금을 삭감하여서는 아니 된다.
+applies_to_personas: ["P1-mother"]
+applies_to_life_stages: ["pregnancy"]
+tags: ["maternity", "prenatal", "health-checkup", "임산부", "정기검진"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["prenatal-checkup-leave"]
+violation_penalty:
+  description: "검진 시간 거부 또는 임금 삭감 시"
+  report_channel: "고용노동부 1350"

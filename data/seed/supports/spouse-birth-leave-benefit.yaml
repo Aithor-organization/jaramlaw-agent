@@ -1,0 +1,19 @@
+support_id: spouse-birth-leave-benefit
+name: 배우자 출산휴가 급여
+amount_krw: 0
+amount_description: "20일간 통상임금 100% (유급, 사용자 부담)"
+condition_summary: "근로자가 배우자 출산을 이유로 청구 시 사업주는 20일 휴가를 부여하고 유급 처리. 출산 후 120일 이내 청구."
+eligibility_rules:
+  - kind: parent_role
+    value: "spouse_of_birth_parent"
+  - kind: within_days_after_birth
+    days: 120
+legal_basis:
+  law: "남녀고용평등법"
+  article: "제18조의2"
+  effective_date: "2025-02-23"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+application_channel: "사업주에 휴가 신청 / 거부 시 1350 고용노동부"
+deadline_kind: "within_days_after_birth"
+deadline_days: 120
+notes: "4회 분할 사용 가능."

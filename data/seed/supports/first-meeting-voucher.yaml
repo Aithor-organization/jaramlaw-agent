@@ -1,0 +1,19 @@
+support_id: first-meeting-voucher
+name: 첫만남이용권
+amount_krw: 2000000
+amount_description: "출생아 1인당 200만원 (국민행복카드 포인트)"
+condition_summary: "출생아 1인당 1회. 출생일로부터 1년 이내 사용"
+eligibility_rules:
+  - kind: has_birth_within_days
+    threshold: 60  # 출생신고 후 60일 이내 신청 권장
+  - kind: birth_after
+    date: "2022-01-01"
+legal_basis:
+  law: "저출산고령사회기본법"
+  article: "시행령"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001640"
+application_channel: "정부24 / 거주지 행정복지센터 / 복지로"
+deadline_kind: "after_birth"
+deadline_days_from_birth: 60
+notes: "둘째 이상 동일하게 적용. 다태아 1인당 별도 지급."

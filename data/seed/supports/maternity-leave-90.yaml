@@ -1,0 +1,16 @@
+support_id: maternity-leave-90
+name: 출산휴가 90일 (다태아 120일)
+amount_krw: 0
+amount_description: "90일 (다태아 120일) — 출산 전후. 출산 후 45일(다태아 60일) 이상 보장. 최초 60일은 유급."
+condition_summary: "임신 중인 여성근로자 청구 시. 5인 미만 사업장 포함 의무 적용."
+eligibility_rules:
+  - kind: parent_role
+    value: "pregnant_employee"
+legal_basis:
+  law: "근로기준법"
+  article: "제74조"
+  effective_date: "2024-10-22"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+application_channel: "사업주에 휴가 신청 / 거부 시 1350 고용노동부"
+deadline_kind: "before_birth"
+notes: "유급 60일 + 무급 30일. 무급 기간은 고용보험에서 출산전후휴가급여 지급."

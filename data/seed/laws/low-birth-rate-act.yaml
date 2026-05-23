@@ -1,0 +1,19 @@
+law_id: low-birth-rate-act
+law_name: 저출산·고령사회기본법
+article: 제10조
+title: 출산·양육 지원
+effective_date: "2024-01-01"
+text_summary: |
+  국가와 지방자치단체는 출산·양육에 따른 경제적 부담을 완화하기 위하여 다음과 같은 지원 시책을 마련하여야 한다.
+
+  [주요 지원 — 시행령에 따른 구체 금액]
+  - 첫만남이용권: 출생아 1인당 200만원 (국민행복카드)
+  - 부모급여: 만 0세 월 100만원, 만 1세 월 50만원
+  - 임산부 친환경 농산물 (서울시 자체사업 등 지자체별)
+  - 출산축하금 (지자체별 조례 — 둘째 이상 추가 지원 일반)
+  - 난임 부부 시술비 지원
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father"]
+applies_to_life_stages: ["pregnancy", "infant"]
+tags: ["birth-support", "출산지원", "부모급여", "첫만남이용권"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001640"
+related_supports: ["first-meeting-voucher", "parental-benefit-0", "parental-benefit-1"]

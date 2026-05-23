@@ -1,0 +1,19 @@
+support_id: single-parent-school-supplies
+name: 한부모 학용품비
+amount_krw: 540000
+amount_description: "연 54만원 (중·고등 자녀 1인당)"
+condition_summary: "한부모 가정 + 기준중위소득 63% 이하 + 중·고등학교 재학 자녀"
+eligibility_rules:
+  - kind: family_flag
+    value: "single_parent"
+  - kind: child_life_stage_in
+    values: ["middle", "high"]
+  - kind: income_decile_max
+    max: 4
+legal_basis:
+  law: "한부모가족지원법"
+  article: "제12조"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001734"
+application_channel: "거주지 행정복지센터 / 복지로 1566-0313"
+deadline_kind: "yearly"

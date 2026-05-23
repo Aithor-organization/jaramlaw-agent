@@ -1,0 +1,57 @@
+scenario_id: B
+scenario_name: 초1 딸 학원 환불 거부
+persona: P2
+reference_date: "2026-05-24"
+description: |
+  박민수 (38세, 화성). 초1 딸이 다닌 영어학원이 중도해지 환불을 거부.
+  자람법으로 학원법 시행령 별표4 기준 환불액 계산 + 대응 절차 + 환불요청서 초안 받기.
+
+family_profile:
+  parents:
+    - role: father
+      age: 38
+      employment: "제조업 회사 과장"
+      region_code: "41590"  # 경기 화성시
+    - role: mother
+      age: 37
+      employment: "전업주부"
+      region_code: "41590"
+  children:
+    - name_masked: "C1"
+      birth_date: "2019-08-10"  # 초1 (만 6세)
+      sex: "F"
+      facility: "초등학교"
+    - name_masked: "C2"
+      birth_date: "2022-03-15"  # 만 4세
+      sex: "M"
+      facility: "어린이집"
+  events: []
+  flags:
+    - "multiple_children"
+    - "single_income"
+
+scenario:
+  type: "academy_refund"
+  query: "학원에서 환불을 안 해줘요. 어떻게 해야 받을 수 있나요?"
+  data:
+    academy_name: "○○영어학원"
+    monthly_fee_krw: 350000
+    months_paid: 3
+    total_paid_krw: 1050000
+    payment_date: "2026-04-20"
+    use_start_date: "2026-04-21"
+    cancellation_request_date: "2026-05-25"
+    days_used: 35
+    total_days: 90
+    refusal_text: "3개월 미만은 환불 불가"
+    refusal_notice_received: true
+
+expected_outputs:
+  support_matches_min: 0
+  rights_cards_min: 0
+  calendar_events_min: 0
+  draft_documents_min: 1  # 환불 요청서
+  expected_refund_krw: 641667  # 1050000 * (55 / 90) = 641,666.67 ≈ 641,667 (±1원)
+  expected_refund_tolerance: 2
+  safety_routing_triggered: false
+  unverifiable_claims_max: 0

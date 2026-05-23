@@ -1,0 +1,218 @@
+schema_version: aithor-agent-workflow/v1
+name: family-legal-jaramlaw
+purpose: 가족 라이프스테이지 법령·정부지원·권리·의무 자동 매칭 + 분쟁 대응 가이드 생성
+runtime: AITHOR-Agent-Framework
+domain_pack: family-legal
+primary_challenge: "공모전 출품 — 부모 라이프스테이지 법령 AI 동반자"
+
+# Constitution 5원칙 (요약)
+constitution:
+  - principle_1_non_counsel_boundary
+  - principle_2_citation_required
+  - principle_3_safety_first_routing
+  - principle_4_no_external_side_effects
+  - principle_5_pii_masking
+
+state:
+  raw_input: object
+  redacted_input: object
+  family_profile: object
+  life_stages: list
+  family_flags: list
+  matched_laws: list
+  support_matches: list
+  board_opinions: map
+  rights_cards: list
+  calendar: object
+  draft_documents: list
+  atomic_claims: list
+  verifier_results: list
+  human_review_needed: boolean
+  safety_routing: object
+  final_report: object
+  audit_log_id: string
+
+# Safety / Tool allowlist — Constitution 원칙 4 강제
+safety:
+  pii_redaction_required: true
+  citation_required: true
+  external_side_effect_tools_allowed: []
+  write_tools_allowed: [write_audit_log]
+  read_tools_allowed: [search_current_laws, get_current_law_article, search_supports, search_scenarios]
+  high_risk_categories:
+    - child_abuse_suspected
+    - medical_emergency
+    - self_harm_signal
+    - domestic_violence
+  emergency_contacts:
+    child_abuse: "1577-1391"
+    medical_emergency: "119"
+    suicide_prevention: "1393"
+    domestic_violence: "1366"
+    labor_complaint: "1350"
+    consumer_complaint: "1372"
+
+# 14 노드 그래프
+nodes:
+  - id: intake
+    owner: intake-agent
+    kind: deterministic
+    description: 부모 입력 수집 — 가족 구성, 아이별 생년월일·지역·시설, 라이프이벤트, 분쟁 시나리오 입력
+    outputs: [raw_input]
+
+  - id: input_guard
+    owner: security-agent
+    kind: guard
+    adapter: AgentShield.RuntimeGuard
+    description: PII 마스킹 (아이 이름·주민번호·정확한 주소), prompt injection 차단, safety 신호 감지
+    inputs: [raw_input]
+    outputs: [redacted_input, safety_routing]
+
+  - id: family_context
+    owner: family-context-agent
+    kind: deterministic
+    description: 아이별 생년월일 → 라이프스테이지(임신/영아/유아/미취학/초등/중등/고등) 자동 분류, 특수 상황 태그 (다자녀/한부모/다문화/맞벌이/장애아동)
+    inputs: [redacted_input]
+    outputs: [family_profile, life_stages, family_flags]
+
+  - id: law_retrieval
+    owner: law-retrieval-agent
+    kind: tool
+    description: 가족 프로필 + 시나리오 키워드 → BM25 + 시드 hybrid matching으로 적용 가능한 법령 조문 조회. LAW.OS LawApiClient 또는 seeded mode.
+    tools: [search_current_laws, get_current_law_article]
+    inputs: [family_profile, life_stages, redacted_input]
+    outputs: [matched_laws]
+
+  - id: support_matching
+    owner: support-matching-agent
+    kind: deterministic
+    description: 가족 프로필 → 받을 자격 있는 정부지원 자동 매칭 + D-day 계산 + 신청 채널 제시
+    inputs: [family_profile, life_stages, family_flags]
+    outputs: [support_matches]
+
+  - id: parallel_expert_board
+    owner: orchestrator-agent
+    kind: parallel_agents
+    description: 5개 전문 Agent 독립 관점 검토 — Law Retrieval / Family Context / Support Matching / Document Drafter / Contrarian Verifier
+    agents:
+      - law-retrieval-agent
+      - family-context-agent
+      - support-matching-agent
+      - document-drafter-agent
+      - contrarian-verifier
+    inputs: [family_profile, matched_laws, support_matches]
+    outputs: [board_opinions]
+
+  - id: document_drafter
+    owner: document-drafter-agent
+    kind: llm
+    description: 시나리오별 신청서·신고서·환불요청서·사고 경위서 요구서·CCTV 열람 신청서 초안 markdown 생성. 학원 환불액 일할 계산 포함.
+    inputs: [family_profile, matched_laws, board_opinions]
+    outputs: [draft_documents]
+
+  - id: verify_atomic_claims
+    owner: atomic-claim-verifier
+    kind: verifier
+    description: 모든 법령 claim에 조문/시행일/출처 인용 강제. 미인용 claim → unverifiable 격리 (Constitution 원칙 2).
+    inputs: [matched_laws, support_matches, board_opinions, draft_documents]
+    outputs: [atomic_claims, verifier_results]
+
+  - id: human_review_gate
+    owner: human-review-gate
+    kind: gate
+    description: 고위험·저신뢰 claim 발견 시 전문가 상담 안내로 라우팅 (변호사·노무사·아동보호전문기관)
+    inputs: [verifier_results, safety_routing]
+    outputs: [human_review_needed]
+
+  - id: rights_card_gen
+    owner: rights-card-agent
+    kind: deterministic
+    description: 매칭된 법령 → 1장짜리 권리카드 (markdown + JSON, PDF stub) 생성. 근거 조문, 시행일, 위반 시 신고처, 거부 사례.
+    inputs: [matched_laws, family_profile]
+    outputs: [rights_cards]
+
+  - id: calendar_gen
+    owner: calendar-agent
+    kind: deterministic
+    description: 아이 생년월일 기반 영유아 건강검진 (모자보건법) + 예방접종 (감염병예방법) + 학교 입학 D-day + 부모급여 전환 시점 iCal 생성
+    inputs: [family_profile]
+    outputs: [calendar]
+
+  - id: freshness_monitor
+    owner: lifecycle-operator
+    kind: monitor
+    description: 시드 법령·지원금 변경 감지 stub. MVP에서는 영향 가구 식별 로직만.
+    inputs: [family_profile, matched_laws]
+    outputs: []
+
+  - id: safety_routing
+    owner: security-agent
+    kind: routing
+    description: 입력에서 학대 의심·의료 응급·자해·가정폭력 신호 감지 시 일반 워크플로우 중단하고 긴급 전문기관 안내 출력
+    inputs: [redacted_input, safety_routing]
+    outputs: [final_report]
+
+  - id: audit_log
+    owner: lifecycle-operator
+    kind: deterministic
+    description: 구조화된 audit log JSON 생성 — 입력/단계별 출력/citation/safety 라우팅 발동 여부 포함. write_audit_log tool로 영속.
+    inputs: [family_profile, matched_laws, support_matches, rights_cards, draft_documents, verifier_results, calendar]
+    outputs: [audit_log_id, final_report]
+
+# 라우팅 — safety routing이 발동되면 일반 워크플로우 우회
+edges:
+  - from: intake
+    to: input_guard
+  - from: input_guard
+    to: safety_routing
+    condition: "safety_routing.triggered == true"
+  - from: input_guard
+    to: family_context
+    condition: "safety_routing.triggered == false"
+  - from: family_context
+    to: [law_retrieval, support_matching]
+  - from: [law_retrieval, support_matching]
+    to: parallel_expert_board
+  - from: parallel_expert_board
+    to: document_drafter
+  - from: document_drafter
+    to: verify_atomic_claims
+  - from: verify_atomic_claims
+    to: human_review_gate
+  - from: human_review_gate
+    to: [rights_card_gen, calendar_gen, freshness_monitor]
+  - from: [rights_card_gen, calendar_gen, freshness_monitor]
+    to: audit_log
+
+# Output schema
+output:
+  final_report:
+    type: object
+    fields:
+      family_profile: object
+      life_stages: list
+      support_matches: list
+      rights_cards: list
+      calendar: object
+      draft_documents: list
+      unverifiable_claims: list
+      human_review_needed: boolean
+      safety_routing_triggered: boolean
+      audit_log_id: string
+      disclaimer: "본 서비스는 양육 정보 보조 도구이며, 구체 사안에 대한 법률 자문이 아닙니다."
+
+# Provenance
+provenance:
+  source_proposal: "자람법_제안서_v2.md"
+  inspired_by: "AITHOR-Agent-Framework policy-finance-agent.workflow.yaml"
+  ai_research_skills_used:
+    - "14-agents"
+    - "15-rag"
+    - "07-safety-alignment"
+    - "11-evaluation"
+    - "17-observability"
+    - "24-spec-driven-planner"
+    - "25-backend-architect"
+    - "28-agent-memory"
+    - "62-mcp-agent-protocols"
+    - "68-claude-native-agent-systems"

@@ -1,0 +1,18 @@
+support_id: preschool-tuition
+name: 누리과정 보육료 (만 3-5세)
+amount_krw: 280000
+amount_description: "월 28만원 수준 (시설 종류·시간에 따라 차등, 누리과정 전액 지원)"
+condition_summary: "만 3-5세 어린이집·유치원 이용 시 보육료 전액 국가·지자체 부담"
+eligibility_rules:
+  - kind: child_age_months_between
+    min: 36
+    max: 71
+  - kind: facility_in
+    values: ["어린이집", "유치원"]
+legal_basis:
+  law: "영유아보육법 / 유아교육법"
+  article: "영유아보육법 제34조"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001948"
+application_channel: "어린이집 입소 시 자동 신청 / 정부24"
+deadline_kind: "ongoing"

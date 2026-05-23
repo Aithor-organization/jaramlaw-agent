@@ -1,0 +1,14 @@
+law_id: childcare-34
+law_name: 영유아보육법
+article: 제34조
+title: 무상보육
+effective_date: "2024-01-01"
+text_summary: |
+  국가와 지방자치단체는 영유아에 대한 무상보육을 단계적으로 실시하여야 한다.
+  만 3-5세 누리과정은 보육료 전액을 국가 및 지자체가 부담한다.
+  만 0-2세 보육료는 소득 수준에 따라 차등 지원된다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool"]
+tags: ["daycare", "free-childcare", "보육료", "누리과정"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001948"
+related_supports: ["preschool-tuition", "infant-childcare-fee"]

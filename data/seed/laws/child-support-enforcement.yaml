@@ -1,0 +1,24 @@
+law_id: child-support-enforcement
+law_name: 양육비 이행확보 및 지원에 관한 법률
+article: 제11조-제21조
+title: 양육비 이행확보 절차
+effective_date: "2024-01-01"
+text_summary: |
+  양육비채권자(부 또는 모)는 양육비채무자가 양육비를 지급하지 아니하는 경우 양육비이행관리원에 양육비 이행지원을 신청할 수 있다.
+
+  [이행확보 수단]
+  1. 양육비 직접지급명령 (법원) — 채무자 임금에서 직접 공제
+  2. 양육비 담보제공명령
+  3. 양육비 일시금지급명령
+  4. 감치 (양육비 미이행 시 30일 이내 감치)
+  5. 운전면허 정지 (정당한 사유 없이 1년 이상 양육비 미지급)
+  6. 출국금지
+  7. 명단공개 (3회 이상 미지급)
+
+  양육비이행관리원이 모든 절차를 지원한다 (소송대리·법률상담 포함).
+applies_to_personas: ["P3"]
+applies_to_life_stages: ["all"]
+tags: ["child-support", "양육비", "이혼", "이행관리원"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=011819"
+contact: "양육비이행관리원 1644-6621"
+related_rights_cards: ["child-support-enforcement"]

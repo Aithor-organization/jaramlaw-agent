@@ -1,0 +1,14 @@
+law_id: child-allowance-4
+law_name: 아동수당법
+article: 제4조
+title: 아동수당의 지급
+effective_date: "2022-04-01"
+text_summary: |
+  국가와 지방자치단체는 만 8세 미만의 모든 아동에게 매월 10만원의 아동수당을 지급한다.
+  소득 수준과 무관하게 지급되며, 보호자 또는 보호자가 지정한 사람의 계좌로 입금된다.
+  신청: 거주지 행정복지센터 또는 정부24, 복지로.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool", "elementary"]
+tags: ["child-allowance", "아동수당", "만8세미만"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=011635"
+related_supports: ["child-allowance"]

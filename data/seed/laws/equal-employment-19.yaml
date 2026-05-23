@@ -1,0 +1,21 @@
+law_id: equal-employment-19
+law_name: 남녀고용평등과 일·가정 양립 지원에 관한 법률
+article: 제19조
+title: 육아휴직
+effective_date: "2025-02-23"
+text_summary: |
+  사업주는 임신 중인 여성근로자가 모성을 보호하거나 만 8세 이하 또는 초등학교 2학년 이하의 자녀를 양육하기 위하여 휴직(이하 "육아휴직")을 신청하는 경우에 이를 허용하여야 한다.
+  육아휴직의 기간은 1년 6개월 이내로 한다.
+  사업주는 육아휴직을 이유로 해고나 그 밖의 불리한 처우를 하여서는 아니 된다.
+  육아휴직은 3회까지 나누어 사용할 수 있다 (분할 사용).
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["pregnancy", "infant", "toddler", "preschool", "elementary"]
+tags: ["parental-leave", "육아휴직", "분할사용"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["parental-leave-1y"]
+exceptions:
+  - "5인 미만 사업장은 일부 예외 (단, 거부 시 노동위원회 구제신청 가능)"
+violation_penalty:
+  description: "육아휴직 거부 또는 불리한 처우"
+  penalty: "500만원 이하 벌금 (남녀고용평등법 제37조)"
+  report_channel: "고용노동부 1350"

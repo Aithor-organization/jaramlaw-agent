@@ -1,0 +1,19 @@
+support_id: parental-leave-benefit
+name: 육아휴직 급여
+amount_krw: 2500000
+amount_description: "월 최대 250만원 (첫 3개월), 200만원 (4-6개월), 160만원 (7개월부터). 통상임금의 100% 한도"
+condition_summary: "고용보험 가입 + 육아휴직 30일 이상 사용 + 만 8세 이하 또는 초2 이하 자녀"
+eligibility_rules:
+  - kind: child_age_months_between
+    min: 0
+    max: 95
+  - kind: parent_employed
+    insurance: "고용보험"
+legal_basis:
+  law: "고용보험법"
+  article: "제70조"
+  effective_date: "2025-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001719"
+application_channel: "거주지 고용센터 또는 고용보험 홈페이지 / 1350"
+deadline_kind: "during_leave"
+notes: "부부 동시 육아휴직 시 6+6 부모육아휴직제 추가 인센티브."

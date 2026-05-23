@@ -1,0 +1,21 @@
+support_id: single-parent-child-support
+name: 한부모 아동양육비
+amount_krw: 210000
+amount_description: "월 21만원 (만 18세 미만 자녀 1인당, 기준중위소득 63% 이하)"
+condition_summary: "한부모 가정 + 기준중위소득 63% 이하 + 만 18세 미만 자녀 양육"
+eligibility_rules:
+  - kind: family_flag
+    value: "single_parent"
+  - kind: child_age_years_between
+    min: 0
+    max: 17
+  - kind: income_decile_max
+    max: 4
+legal_basis:
+  law: "한부모가족지원법"
+  article: "제12조"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001734"
+application_channel: "거주지 행정복지센터 / 복지로 1566-0313"
+deadline_kind: "monthly"
+notes: "조손가족, 청소년 한부모는 추가 양육비. 학용품비 별도."

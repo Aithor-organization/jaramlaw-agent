@@ -1,0 +1,29 @@
+law_id: academy-decree-18
+law_name: 학원의 설립·운영 및 과외교습에 관한 법률 시행령
+article: 제18조 별표4
+title: 학원 수강료 등의 반환기준
+effective_date: "2024-01-01"
+text_summary: |
+  학원 또는 교습소가 수강자(또는 보호자)로부터 수강료를 받은 후 다음 사유로 수강이 불가능하게 된 경우 수강료를 반환하여야 한다.
+
+  [반환기준 — 사용일수 기준 일할 계산]
+  - 교습 기간이 1개월 이내인 경우: 교습 시작 전 → 전액, 교습 시작 후 → 미사용 일수에 해당하는 비율로 환산한 금액
+  - 교습 기간이 1개월 초과인 경우: 교습 시작 전 → 전액, 교습 시작 후 → 다음 산식에 따른 금액
+    환불액 = 결제금액 × (잔여 교습일수 / 전체 교습일수)
+
+  학원은 수강료 환불을 정당한 사유 없이 거부할 수 없다.
+applies_to_personas: ["P2-mother", "P2-father"]
+applies_to_life_stages: ["preschool", "elementary", "middle", "high"]
+tags: ["academy", "refund", "학원법", "환불기준"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001823"
+related_documents: ["academy_refund_request"]
+violation_penalty:
+  description: "환불 거부 시"
+  report_channels:
+    - "시도교육청 학원민원 (관할 교육지원청)"
+    - "1372 소비자상담센터"
+    - "한국소비자원 분쟁조정"
+    - "소액사건심판 (140만원 이하)"
+calculation:
+  formula: "refund = paid * (remaining_days / total_days)"
+  notes: "교습 기간 1개월 초과 시 적용"

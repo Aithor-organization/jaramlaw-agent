@@ -1,0 +1,14 @@
+law_id: equal-employment-37
+law_name: 남녀고용평등과 일·가정 양립 지원에 관한 법률
+article: 제37조
+title: 벌칙
+effective_date: "2020-12-08"
+text_summary: |
+  육아휴직, 가족돌봄휴가, 임신 중 여성근로자의 시간외근로 제한 등을 위반한 사업주는 500만원 이하의 벌금에 처한다.
+  또한 육아휴직을 이유로 해고나 불리한 처우를 한 경우 3년 이하의 징역 또는 3천만원 이하의 벌금에 처한다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["all"]
+tags: ["penalty", "벌칙", "고용평등"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001706"
+related_rights_cards: ["parental-leave-1y", "spouse-birth-leave"]
+report_channel: "고용노동부 1350"

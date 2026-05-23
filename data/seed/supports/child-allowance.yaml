@@ -1,0 +1,17 @@
+support_id: child-allowance
+name: 아동수당
+amount_krw: 100000
+amount_description: "월 10만원 (만 8세 미만 모든 아동)"
+condition_summary: "만 0세부터 만 8세 생일 전일까지 매월 지급. 소득 수준 무관"
+eligibility_rules:
+  - kind: child_age_months_between
+    min: 0
+    max: 95  # 만 8세 = 96개월 미만
+legal_basis:
+  law: "아동수당법"
+  article: "제4조"
+  effective_date: "2022-04-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=011635"
+application_channel: "정부24 / 거주지 행정복지센터 / 복지로"
+deadline_kind: "monthly"
+notes: "부모급여와 중복 수령 가능 (별도 지원)."

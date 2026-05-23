@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jaramlaw-agent"
+version = "0.1.0"
+description = "자람법(JaramLaw) — 가족 라이프스테이지 법령·정책 AI 동반자 (AITHOR Agent Framework 기반)"
+requires-python = ">=3.10"
+authors = [{name = "AITHOR / cafe99"}]
+license = {text = "MIT"}
+dependencies = [
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+jaramlaw = "jaramlaw_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,26 @@
+law_id: infectious-disease-24
+law_name: 감염병의 예방 및 관리에 관한 법률
+article: 제24조
+title: 필수예방접종
+effective_date: "2024-01-01"
+text_summary: |
+  특별자치도지사 또는 시장·군수·구청장은 다음 감염병에 대하여 관할 보건소를 통하여 필수예방접종을 실시하여야 한다.
+
+  [필수예방접종 표준 일정]
+  - BCG: 생후 4주 이내
+  - B형 간염: 0, 1, 6개월
+  - DTaP-IPV-Hib: 2, 4, 6개월 / 추가 15-18개월 / 4-6세
+  - 폐렴구균 (PCV): 2, 4, 6개월 + 추가 12-15개월
+  - 로타바이러스: 2, 4(, 6)개월
+  - MMR (홍역·유행성이하선염·풍진): 12-15개월, 4-6세
+  - 수두: 12-15개월
+  - 일본뇌염: 12-23개월부터
+  - A형 간염: 12-23개월, 6개월 후 추가
+  - HPV (만 12세 여아): 2회
+  - 인플루엔자: 매년 (만 6개월-13세 무료)
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool", "elementary", "middle"]
+tags: ["vaccination", "예방접종", "필수접종"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001738"
+calendar_template: "vaccination-schedule"
+contact: "거주지 보건소 또는 지정 의료기관"

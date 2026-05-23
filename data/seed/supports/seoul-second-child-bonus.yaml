@@ -1,0 +1,19 @@
+support_id: seoul-second-child-bonus
+name: 서울시 둘째 출산축하금 (예시)
+amount_krw: 2000000
+amount_description: "2,000,000원 (서울시 자치구 조례 — 자치구별 상이, 예시 금액)"
+condition_summary: "서울시 거주 + 둘째 이상 출생 + 출산 시점 부모 주민등록"
+eligibility_rules:
+  - kind: region_starts_with
+    prefix: "11"  # 서울 (행정구역 코드 11)
+  - kind: family_flag
+    value: "second_child"
+legal_basis:
+  law: "서울특별시 출산 등 지원에 관한 조례 / 자치구 조례"
+  article: "자치구별 상이"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/ordinSc.do"
+application_channel: "거주지 행정복지센터"
+deadline_kind: "after_birth"
+deadline_days_from_birth: 180
+notes: "자치구별 금액 상이 — 위 금액은 예시. 정확한 금액은 거주지 자치구 확인 필요."

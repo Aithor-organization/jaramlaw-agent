@@ -1,0 +1,17 @@
+support_id: parental-benefit-1
+name: 부모급여 (만 1세)
+amount_krw: 500000
+amount_description: "월 50만원 (만 1세, 12-23개월)"
+condition_summary: "만 1세 생일부터 만 2세 생일 전일까지 매월 지급"
+eligibility_rules:
+  - kind: child_age_months_between
+    min: 12
+    max: 23
+legal_basis:
+  law: "아동수당법 / 저출산고령사회기본법 시행령"
+  article: "관련 시행령"
+  effective_date: "2024-01-01"
+  source_url: "https://www.law.go.kr/lsInfoP.do?lsId=011635"
+application_channel: "정부24 / 거주지 행정복지센터 / 복지로"
+deadline_kind: "monthly"
+notes: "만 0세 부모급여에서 자동 전환. 별도 재신청 불필요."

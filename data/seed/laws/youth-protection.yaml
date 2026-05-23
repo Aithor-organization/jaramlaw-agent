@@ -1,0 +1,14 @@
+law_id: youth-protection
+law_name: 청소년보호법
+article: 제16조, 제29조
+title: 유해매체물 차단 및 청소년 보호
+effective_date: "2024-01-01"
+text_summary: |
+  19세 미만 청소년에게 청소년 유해매체물을 판매·대여·배포하거나 시청·이용 제공한 자는 처벌된다.
+  정보통신서비스 제공자는 청소년 유해정보에 대해 표시·차단 의무가 있다.
+  사이버폭력(모욕·명예훼손·협박)은 정보통신망법과 함께 적용되며, 형사 고소도 가능하다.
+applies_to_personas: ["P3"]
+applies_to_life_stages: ["elementary", "middle", "high"]
+tags: ["youth-protection", "사이버폭력", "유해매체", "SNS"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001789"
+report_channel: "117 (학교폭력·사이버폭력 신고)"

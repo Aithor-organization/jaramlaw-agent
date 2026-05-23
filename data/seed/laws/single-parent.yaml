@@ -1,0 +1,24 @@
+law_id: single-parent
+law_name: 한부모가족지원법
+article: 제5조-제17조
+title: 한부모가족 지원
+effective_date: "2024-01-01"
+text_summary: |
+  한부모가족(이혼·사별·미혼모·미혼부·생계미부양 등으로 부모 한 쪽이 아동을 양육하는 가족)은 다음 지원을 받을 수 있다.
+
+  [주요 지원]
+  - 아동양육비 (만 18세 미만 자녀 1인당 월 21만원)
+  - 추가 아동양육비 (조손가족, 청소년 한부모)
+  - 학용품비 (중고등 자녀)
+  - 자립지원촉진수당 (청소년 한부모)
+  - 한부모가족 복지시설 입소
+  - 자녀 교육비 (대학 등록금 무이자 융자)
+
+  소득기준: 기준중위소득 63% 이하 (2024 기준, 매년 조정).
+  신청: 거주지 행정복지센터 또는 정부24, 복지로.
+applies_to_personas: ["P3"]
+applies_to_life_stages: ["all"]
+tags: ["single-parent", "한부모", "양육지원"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001734"
+related_supports: ["single-parent-child-support", "single-parent-school-supplies"]
+contact: "거주지 행정복지센터 / 복지로 1566-0313"

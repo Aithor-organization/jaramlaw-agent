@@ -1,0 +1,22 @@
+law_id: child-abuse-10
+law_name: 아동학대범죄의 처벌 등에 관한 특례법
+article: 제10조
+title: 아동학대범죄 신고의무와 절차
+effective_date: "2024-01-01"
+text_summary: |
+  누구든지 아동학대범죄를 알게 된 경우나 그 의심이 있는 경우에는 아동보호전문기관 또는 수사기관에 신고할 수 있다.
+  특히 다음 직군은 직무상 아동학대범죄를 알게 되거나 의심하는 경우 즉시 신고 의무를 진다 (의무신고자):
+  - 의료인, 응급구조사
+  - 어린이집·유치원 종사자
+  - 학교 교직원
+  - 아동복지시설 종사자
+  - 청소년 시설 종사자
+  - 사회복지전담공무원 등
+  신고 의무 위반 시 1천만원 이하 과태료.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["infant", "toddler", "preschool", "elementary", "middle", "high"]
+tags: ["child-abuse", "아동학대", "신고의무"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=011736"
+related_rights_cards: ["abuse-report-obligation"]
+emergency_contact: "아이지킴이 콜 1577-1391 / 112"
+notes: "신고자 신원은 비밀 보장 (아동학대처벌법 제62조)"

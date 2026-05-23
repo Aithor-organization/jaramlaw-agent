@@ -1,0 +1,49 @@
+scenario_id: C
+scenario_name: 어린이집 24개월 아들 사고
+persona: P1
+reference_date: "2026-05-24"
+description: |
+  24개월 아들이 어린이집 낮잠 후 미끄러져 이마 멍이 들었다고 통보 받음.
+  부모가 관찰한 결과 멍이 크고 머리 옆까지 멍이 있음. 어린이집은 영상 보여주기 거부.
+  자람법으로 법령 진단 + 부모 권리 카드 + 체크리스트 + 학대 의심 라우팅.
+
+family_profile:
+  parents:
+    - role: mother
+      age: 32
+      employment: "정규직 (대기업, IT)"
+      region_code: "11440"  # 서울 마포구
+    - role: father
+      age: 34
+      employment: "정규직 (중소기업)"
+      region_code: "11440"
+  children:
+    - name_masked: "C1"
+      birth_date: "2024-05-15"  # 24개월
+      sex: "M"
+      facility: "어린이집"
+  events: []
+  flags:
+    - "working_mom"
+
+scenario:
+  type: "daycare_accident"
+  query: "어린이집에서 우리 아이가 미끄러져 멍이 들었다는데, 멍이 너무 크고 머리 옆까지 있어요. 어린이집은 CCTV 못 보여준다고 합니다."
+  data:
+    notification_text: "낮잠 후 아이가 미끄러져 이마에 멍이 들었습니다"
+    parent_observation: "멍이 크고 머리 옆까지 멍이 있음. 평소와 다른 자국."
+    cctv_access_denied: true
+    accident_report_received: false
+    keywords_detected:
+      - "멍이 크다"
+      - "반복 사고"  # 부모가 의심 표현했다고 가정
+
+expected_outputs:
+  support_matches_min: 0  # 사고 시나리오 — 지원 매칭 영역 아님
+  rights_cards_min: 2     # 어린이집 사고 보고 + CCTV 열람권
+  calendar_events_min: 0
+  draft_documents_min: 2  # 사고 경위서 요구서 + CCTV 열람 신청서
+  safety_routing_triggered: true  # "멍이 크다" 학대 의심 키워드 매칭
+  safety_category: "child_abuse_suspected"
+  safety_contact: "1577-1391"
+  unverifiable_claims_max: 0

@@ -1,0 +1,18 @@
+law_id: employment-insurance-parental-benefit
+law_name: 고용보험법
+article: 제70조-제74조
+title: 육아휴직 급여 등
+effective_date: "2025-01-01"
+text_summary: |
+  고용보험에 가입한 근로자가 남녀고용평등법 제19조에 따른 육아휴직을 30일 이상 사용한 경우 육아휴직 급여를 지급한다.
+
+  [2025년 기준 급여]
+  - 첫 3개월: 통상임금의 100% (월 최대 250만원)
+  - 4-6개월: 통상임금의 100% (월 최대 200만원)
+  - 7개월부터: 통상임금의 100% (월 최대 160만원)
+  - 부부 동시 육아휴직 시 추가 인센티브 (6+6 부모육아휴직제)
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["pregnancy", "infant", "toddler", "preschool", "elementary"]
+tags: ["parental-leave-benefit", "고용보험", "육아휴직급여"]
+source_url: "https://www.law.go.kr/lsInfoP.do?lsId=001719"
+contact: "고용보험 1350 / 거주지 고용센터"
