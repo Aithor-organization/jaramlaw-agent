@@ -1,0 +1,44 @@
+schema: aithor-agent-workflow/v1
+name: jaramlaw-model-routing
+runtime: deterministic-local-python
+purpose: Formal model/role routing, budget, and isolation plan for JaramLaw.
+
+state:
+  redacted_input: object
+  safety_routing: object
+  criticality: string
+  model_routing: object
+  budget_guard: object
+  model_guard: object
+
+nodes:
+  - id: classify_criticality
+    implementation: src/jaramlaw_agent/model_routing.py::classify_criticality
+    outputs: [criticality]
+
+  - id: assign_roles
+    implementation: src/jaramlaw_agent/model_routing.py::build_role_assignments
+    outputs: [model_routing.assignments]
+
+  - id: enforce_model_guard
+    implementation: src/jaramlaw_agent/model_routing.py::validate_model_assignments
+    outputs: [model_guard]
+
+  - id: estimate_budget
+    implementation: src/jaramlaw_agent/budget_guard.py::BudgetGuard.authorize
+    outputs: [budget_guard]
+
+edges:
+  - from: classify_criticality
+    to: assign_roles
+  - from: assign_roles
+    to: enforce_model_guard
+  - from: enforce_model_guard
+    to: estimate_budget
+
+safety:
+  external_model_calls: false
+  writer_verifier_isolation_required: true
+  independent_validator_isolation_required: true
+  per_run_budget_env: JARAMLAW_PER_RUN_BUDGET_USD
+  monthly_budget_env: JARAMLAW_MONTHLY_BUDGET_USD

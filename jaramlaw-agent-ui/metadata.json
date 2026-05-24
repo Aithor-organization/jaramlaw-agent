@@ -1,0 +1,6 @@
+{
+  "name": "JaramLaw Agent",
+  "description": "우리아이와 함께 자라는 가족 라이프스테이지 법령·정책 AI 동반자 '자람법(JaramLaw)' - 영유아 보육법, 어린이집 CCTV, 유치원 및 학원 환불 규정, 임신/출산 및 부모 권익 보호 조항 제공",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

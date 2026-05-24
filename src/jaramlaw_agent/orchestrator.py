@@ -11,13 +11,18 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import DISCLAIMER
+from .agent_topology import summarize_team_topology
 from .audit import write_audit_log
+from .budget_guard import BudgetGuard
 from .calendar_gen import generate_calendar
+from .cross_model_verifier import run_independent_validation
 from .document_drafter import draft_documents_for_scenario
 from .family_context import build_family_profile
 from .guard import run_guard
 from .human_review import determine_human_review
 from .law_retrieval import retrieve_matched_laws
+from .memory_rag import JaramLawMemoryRAG
+from .model_routing import plan_model_routing
 from .models import (
     CalendarOutput,
     DraftDocument,
@@ -30,9 +35,10 @@ from .models import (
     SupportMatch,
     VerifierResults,
 )
+from .observability import WorkflowTracer
 from .rights_card import generate_rights_cards
 from .support_matching import match_supports
-from .verifier import collect_atomic_claims, verify_claims
+from .verifier import collect_atomic_claims, verify_claims_with_retry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -130,14 +136,57 @@ def run_workflow(
       14. audit_log → final_report
     """
     workflow_path = workflow_path or DEFAULT_WORKFLOW_PATH
+    tracer = WorkflowTracer()
+    memory = JaramLawMemoryRAG()
+    tracer.trace(
+        "workflow_start",
+        scenario_id=scenario_id,
+        workflow_path=str(workflow_path),
+        write_audit=write_audit,
+    )
 
     # Node 1-2: intake + guard
     guard_result = run_guard(raw_input)
     redacted = guard_result.redacted_input
     safety = guard_result.safety_routing
+    tracer.trace(
+        "input_guard",
+        safety_triggered=safety.triggered,
+        safety_category=safety.category,
+        injection_detected=guard_result.injection_detected,
+        notes_count=len(guard_result.notes),
+    )
+
+    model_routing = plan_model_routing(redacted, safety)
+    model_routing["team_topology"] = summarize_team_topology()
+    budget_guard = BudgetGuard.from_env().authorize(model_routing).to_dict()
+    memory_context = memory.recall(redacted)
+    tracer.trace(
+        "model_routing",
+        criticality=model_routing.get("criticality"),
+        assignments=len(model_routing.get("assignments", [])),
+        guard_status=model_routing.get("model_guard", {}).get("status"),
+    )
+    tracer.trace(
+        "budget_guard",
+        allowed=budget_guard.get("allowed"),
+        estimated_cost_usd=budget_guard.get("estimated_cost_usd"),
+    )
+    tracer.trace(
+        "memory_recall",
+        matches=len(memory_context.get("matches", [])),
+        record_count=memory_context.get("record_count"),
+    )
 
     # Node 4: family_context (safety triggered여도 프로필은 계산 — 보고서 일관성)
     profile = build_family_profile(redacted)
+    tracer.trace(
+        "family_context",
+        parents=len(profile.parents),
+        children=len(profile.children),
+        flags=profile.flags,
+        life_stages=profile.life_stages,
+    )
 
     # safety triggered → 일반 워크플로우 우회, safety_routing 노드로 직행
     if safety.triggered:
@@ -160,9 +209,28 @@ def run_workflow(
             human_review=human,
             disclaimer=DISCLAIMER,
             scenario_id=scenario_id,
+            model_routing=model_routing,
+            budget_guard=budget_guard,
+            memory_context=memory_context,
         )
+        report.independent_validation = run_independent_validation(
+            report,
+            model_routing=model_routing,
+            budget_guard=budget_guard,
+        )
+        tracer.trace(
+            "independent_validation",
+            status=report.independent_validation.get("status"),
+            findings=len(report.independent_validation.get("findings", [])),
+        )
+        capture = memory.capture_outcome(report) if write_audit else {"captured": False, "reason": "audit_disabled"}
+        report.memory_context = {**memory_context, "capture": capture}
+        tracer.trace("memory_capture", captured=capture.get("captured"))
+        report.trace_summary = tracer.summary()
         if write_audit:
             report.audit_log_id = write_audit_log(report)
+            tracer.trace("audit_log", audit_log_id=report.audit_log_id)
+            tracer.export()
         return report
 
     # Node 5: law_retrieval
@@ -176,9 +244,11 @@ def run_workflow(
         top_k=15,
         seed_dir=seed_laws_dir,
     )
+    tracer.trace("law_retrieval", matched_laws=len(matched_laws))
 
     # Node 6: support_matching
     supports = match_supports(profile, seed_dir=seed_supports_dir)
+    tracer.trace("support_matching", support_matches=len(supports))
 
     # Node 8: document_drafter
     scenario_type = scenario_obj.get("type")
@@ -189,19 +259,31 @@ def run_workflow(
         scenario_data=scenario_data,
         laws=matched_laws,
     )
+    tracer.trace("document_drafter", draft_documents=len(draft_docs), scenario_type=scenario_type)
 
     # Node 11: rights_card_gen
     rights_cards = generate_rights_cards(matched_laws, profile)
+    tracer.trace("rights_card_gen", rights_cards=len(rights_cards))
 
     # Node 12: calendar_gen
     calendar_out = generate_calendar(profile)
+    tracer.trace("calendar_gen", calendar_events=len(calendar_out.events if calendar_out else []))
 
     # Node 7: parallel_expert_board (board_opinions)
     board = _board_opinions(profile, matched_laws, supports, draft_docs)
+    tracer.trace("parallel_expert_board", board_agents=len(board))
 
     # Node 9: verify_atomic_claims
     claims = collect_atomic_claims(matched_laws, supports, rights_cards, draft_docs)
-    verifier_results = verify_claims(claims)
+    verifier_results = verify_claims_with_retry(claims)
+    tracer.trace(
+        "verify_atomic_claims",
+        claims=len(claims),
+        verified=verifier_results.verified_count,
+        partial=verifier_results.partial_count,
+        unverifiable=verifier_results.unverifiable_count,
+        attempts=verifier_results.retry_summary.get("attempts_used"),
+    )
 
     # Node 10: human_review_gate
     human = determine_human_review(
@@ -209,6 +291,7 @@ def run_workflow(
         safety_routing=safety,
         scenario_type=scenario_type,
     )
+    tracer.trace("human_review_gate", needed=human.needed)
 
     # Node 14: audit_log + final_report
     report = FinalReport(
@@ -224,11 +307,30 @@ def run_workflow(
         human_review=human,
         disclaimer=DISCLAIMER,
         scenario_id=scenario_id,
+        board_opinions=board,
+        model_routing=model_routing,
+        budget_guard=budget_guard,
+        memory_context=memory_context,
     )
 
-    # board_opinions를 별도 dict로 audit log에 포함
-    report.__dict__["board_opinions"] = board
+    # Final governance gates run after all writer/reviewer outputs are attached.
+    report.independent_validation = run_independent_validation(
+        report,
+        model_routing=model_routing,
+        budget_guard=budget_guard,
+    )
+    tracer.trace(
+        "independent_validation",
+        status=report.independent_validation.get("status"),
+        findings=len(report.independent_validation.get("findings", [])),
+    )
+    capture = memory.capture_outcome(report) if write_audit else {"captured": False, "reason": "audit_disabled"}
+    report.memory_context = {**memory_context, "capture": capture}
+    tracer.trace("memory_capture", captured=capture.get("captured"))
+    report.trace_summary = tracer.summary()
 
     if write_audit:
         report.audit_log_id = write_audit_log(report)
+        tracer.trace("audit_log", audit_log_id=report.audit_log_id)
+        tracer.export()
     return report

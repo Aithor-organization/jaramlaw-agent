@@ -192,6 +192,7 @@ class VerifierResults:
     partial_count: int = 0
     unverifiable_count: int = 0
     verified_ratio: float = 0.0
+    retry_summary: dict[str, Any] = field(default_factory=dict)
 
     def summarize(self) -> dict[str, Any]:
         total = len(self.atomic_claims)
@@ -245,6 +246,12 @@ class FinalReport:
     generated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     scenario_id: Optional[str] = None
     workflow_version: str = "family-legal-jaramlaw/v1"
+    board_opinions: dict[str, Any] = field(default_factory=dict)
+    model_routing: dict[str, Any] = field(default_factory=dict)
+    budget_guard: dict[str, Any] = field(default_factory=dict)
+    memory_context: dict[str, Any] = field(default_factory=dict)
+    independent_validation: dict[str, Any] = field(default_factory=dict)
+    trace_summary: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

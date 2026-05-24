@@ -1,0 +1,114 @@
+topology_version: jaramlaw-team/v1
+name: jaramlaw-agent-board
+orchestration_pattern: manager_worker_with_verifier_and_independent_validation
+runtime: deterministic-local-python
+external_model_calls: false
+
+manager:
+  id: workflow-orchestrator
+  implementation: src/jaramlaw_agent/orchestrator.py
+  responsibilities:
+    - route input through guard, retrieval, drafting, verification, review, audit
+    - attach operational metadata for routing, budget, memory, trace, and validation
+
+agents:
+  - id: input-guard
+    implementation: src/jaramlaw_agent/guard.py
+    mode: gate
+    criticality: critical
+    isolation_group: safety
+    responsibilities:
+      - pii redaction
+      - prompt-injection scrubbing
+      - emergency/safety routing
+
+  - id: family-context-agent
+    implementation: src/jaramlaw_agent/family_context.py
+    mode: worker
+    criticality: standard
+    isolation_group: context
+
+  - id: law-retrieval-agent
+    implementation: src/jaramlaw_agent/law_retrieval.py
+    mode: worker
+    criticality: standard
+    isolation_group: retrieval
+
+  - id: support-matching-agent
+    implementation: src/jaramlaw_agent/support_matching.py
+    mode: worker
+    criticality: standard
+    isolation_group: retrieval
+
+  - id: document-drafter-agent
+    implementation: src/jaramlaw_agent/document_drafter.py
+    mode: writer
+    criticality: standard
+    isolation_group: writer
+
+  - id: contrarian-verifier
+    implementation: src/jaramlaw_agent/orchestrator.py::_board_opinions
+    mode: review-only
+    criticality: deep
+    isolation_group: verifier
+
+  - id: atomic-claim-verifier
+    implementation: src/jaramlaw_agent/verifier.py
+    mode: review-only
+    criticality: deep
+    isolation_group: verifier
+
+  - id: independent-validator
+    implementation: src/jaramlaw_agent/cross_model_verifier.py
+    mode: validation-only
+    criticality: critical
+    isolation_group: independent-validation
+
+  - id: memory-rag
+    implementation: src/jaramlaw_agent/memory_rag.py
+    mode: read-mostly
+    criticality: standard
+    isolation_group: memory
+    constraints:
+      - memory is metadata-only
+      - memory is not legal authority
+      - captured records are readonly and need approval
+
+  - id: observability-engineer
+    implementation: src/jaramlaw_agent/observability.py
+    mode: telemetry
+    criticality: standard
+    isolation_group: trace
+
+  - id: budget-guard
+    implementation: src/jaramlaw_agent/budget_guard.py
+    mode: gate
+    criticality: critical
+    isolation_group: governance
+
+model_routing_summary:
+  shallow:
+    - router
+    - contrarian-verifier
+  standard:
+    - law-retrieval-agent
+    - support-matching-agent
+    - document-drafter-agent
+    - atomic-claim-verifier
+  deep:
+    - contrarian-verifier
+    - atomic-claim-verifier
+  critical:
+    - input-guard
+    - independent-validator
+    - budget-guard
+
+governance_gates:
+  - id: writer_verifier_isolation
+    enforced_by: src/jaramlaw_agent/model_routing.py
+  - id: budget_guard
+    enforced_by: src/jaramlaw_agent/budget_guard.py
+  - id: independent_final_validation
+    enforced_by: src/jaramlaw_agent/cross_model_verifier.py
+  - id: audit_trace_export
+    enforced_by: src/jaramlaw_agent/audit.py and src/jaramlaw_agent/observability.py

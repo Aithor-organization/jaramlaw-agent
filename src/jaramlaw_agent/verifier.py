@@ -129,3 +129,31 @@ def verify_claims(claims: list[AtomicClaim]) -> VerifierResults:
         unverifiable_count=unverifiable,
         verified_ratio=verified_ratio,
     )
+
+
+def verify_claims_with_retry(
+    claims: list[AtomicClaim],
+    *,
+    max_attempts: int = 3,
+) -> VerifierResults:
+    """Run the citation verifier with an explicit bounded retry record.
+
+    The deterministic workflow does not invent missing citations during retry.
+    It re-runs the same verifier and records the retry loop so downstream
+    gates can distinguish "not attempted" from "attempted and still blocked".
+    """
+    attempts: list[dict[str, Any]] = []
+    final = verify_claims(claims)
+    attempts.append({"attempt": 1, **final.summarize()})
+
+    while final.unverifiable_count > 0 and len(attempts) < max(1, max_attempts):
+        final = verify_claims(claims)
+        attempts.append({"attempt": len(attempts) + 1, **final.summarize()})
+
+    final.retry_summary = {
+        "max_attempts": max_attempts,
+        "attempts_used": len(attempts),
+        "resolved": final.unverifiable_count == 0,
+        "history": attempts,
+    }
+    return final

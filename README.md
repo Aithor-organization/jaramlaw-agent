@@ -15,6 +15,15 @@
 
 ---
 
+## 기본 UI 모습
+
+부모가 바로 상담 흐름을 이해할 수 있도록, 따뜻한 색감의 상담 입력·이력·검토 결과·전문가 확인 패널을 한 화면에 배치했다.
+UI는 `jaramlaw-agent-ui/`에서 실행되며, Python 워크플로우와 운영 계층 상태를 함께 표시한다.
+
+![JaramLaw Agent 기본 UI](docs/assets/jaramlaw-ui-basic.png)
+
+---
+
 ## 빠른 시작
 
 ```bash
@@ -94,12 +103,27 @@ jaramlaw-agent/
 │   ├── workflow.py          # YAML 파서 + validator
 │   ├── audit.py             # 구조화 audit log
 │   └── cli.py               # 진입점
-├── tests/                   # 54 unit + e2e PASS
+├── tests/                   # 65 unit + e2e PASS
 ├── examples/                # scenario A/B/C 실행 예제
 ├── audit_logs/              # JSON audit log
 ├── runs/                    # JSON final_report
 └── docs/                    # 아키텍처 + SKILLs 통합 가이드
 ```
+
+---
+
+## Operational Agent Layer
+
+JaramLaw now includes the formal operations layer expected from a complete
+AI-agent system:
+
+- `agents/team.yaml` central team topology
+- `workflows/jaramlaw-model-routing.workflow.yaml` role routing, isolation, and budget metadata
+- `workflows/jaramlaw-brain.workflow.yaml` metadata-only memory workflow
+- `src/jaramlaw_agent/model_routing.py`, `budget_guard.py`, `memory_rag.py`, `observability.py`, `cross_model_verifier.py`
+- UI Ops APIs for workflow status, audit logs, traces, local publish, and batch consult
+
+See [`docs/operational-agent-architecture.md`](docs/operational-agent-architecture.md).
 
 ---
 
@@ -219,7 +243,7 @@ PYTHONPATH=src python3 -m jaramlaw_agent demo --scenario C
 ## 테스트 결과
 
 ```
-54 passed, 8 warnings in 0.67s
+65 passed, 4 skipped in 0.97s
 ```
 
 전체 테스트:
@@ -235,3 +259,5 @@ PYTHONPATH=src python3 -m jaramlaw_agent demo --scenario C
 - `test_workflow_validation.py` (3)
 - `test_constitution.py` (6) — 5원칙 회귀 차단
 - `test_scenarios.py` (4) — A/B/C e2e + deterministic 재현성
+- `test_operational_governance.py` (4) — model routing, budget, memory, independent validation
+- `test_mcp_server.py` (2) — MCP-style tool registry

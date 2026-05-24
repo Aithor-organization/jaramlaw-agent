@@ -9,17 +9,21 @@ build/
 dist/
 .DS_Store
 audit_logs/*.json
+audit_logs/*.jsonl
 !audit_logs/.gitkeep
 runs/*.json
+runs/*.png
 !runs/.gitkeep
 .env
 .env.local
 .env.*
 !.env.example
+node_modules/
 
 # 외부 클론 (read-only, 자체 git 관리)
 external/
 
 # Cache
 .cache/
+.jaramlaw-brain/
 *.log

@@ -29,6 +29,11 @@ state:
   verifier_results: list
   human_review_needed: boolean
   safety_routing: object
+  model_routing: object
+  budget_guard: object
+  memory_context: object
+  independent_validation: object
+  trace_summary: object
   final_report: object
   audit_log_id: string
 
@@ -37,7 +42,7 @@ safety:
   pii_redaction_required: true
   citation_required: true
   external_side_effect_tools_allowed: []
-  write_tools_allowed: [write_audit_log]
+  write_tools_allowed: [write_audit_log, capture_memory_outcome, export_trace]
   read_tools_allowed: [search_current_laws, get_current_law_article, search_supports, search_scenarios]
   high_risk_categories:
     - child_abuse_suspected
@@ -67,6 +72,27 @@ nodes:
     description: PII 마스킹 (아이 이름·주민번호·정확한 주소), prompt injection 차단, safety 신호 감지
     inputs: [raw_input]
     outputs: [redacted_input, safety_routing]
+
+  - id: model_routing
+    owner: budget-guard
+    kind: governance
+    description: Assign deterministic model tiers and enforce writer/verifier/independent-validator isolation before downstream workflow nodes.
+    inputs: [redacted_input, safety_routing]
+    outputs: [model_routing]
+
+  - id: budget_guard
+    owner: budget-guard
+    kind: gate
+    description: Estimate route cost and attach allow/block metadata for the workflow run.
+    inputs: [model_routing]
+    outputs: [budget_guard]
+
+  - id: memory_recall
+    owner: memory-rag
+    kind: retrieval
+    description: Recall metadata-only prior workflow patterns; memory is not legal authority and never stores raw user text.
+    inputs: [redacted_input]
+    outputs: [memory_context]
 
   - id: family_context
     owner: family-context-agent
@@ -124,6 +150,13 @@ nodes:
     inputs: [verifier_results, safety_routing]
     outputs: [human_review_needed]
 
+  - id: independent_validation
+    owner: independent-validator
+    kind: verifier
+    description: Final independent validation gate for model guard, budget guard, citation completeness, and safety/human-review consistency.
+    inputs: [final_report, model_routing, budget_guard]
+    outputs: [independent_validation]
+
   - id: rights_card_gen
     owner: rights-card-agent
     kind: deterministic
@@ -159,10 +192,21 @@ nodes:
     inputs: [family_profile, matched_laws, support_matches, rights_cards, draft_documents, verifier_results, calendar]
     outputs: [audit_log_id, final_report]
 
+  - id: trace_export
+    owner: observability-engineer
+    kind: telemetry
+    description: Export metadata-only workflow trace events to audit_logs/trace.jsonl.
+    inputs: [trace_summary]
+    outputs: [trace_summary]
+
 # 라우팅 — safety routing이 발동되면 일반 워크플로우 우회
 edges:
   - from: intake
     to: input_guard
+  - from: input_guard
+    to: [model_routing, memory_recall]
+  - from: model_routing
+    to: budget_guard
   - from: input_guard
     to: safety_routing
     condition: "safety_routing.triggered == true"
@@ -182,7 +226,11 @@ edges:
   - from: human_review_gate
     to: [rights_card_gen, calendar_gen, freshness_monitor]
   - from: [rights_card_gen, calendar_gen, freshness_monitor]
+    to: independent_validation
+  - from: independent_validation
     to: audit_log
+  - from: audit_log
+    to: trace_export
 
 # Output schema
 output:
@@ -197,6 +245,11 @@ output:
       draft_documents: list
       unverifiable_claims: list
       human_review_needed: boolean
+      model_routing: object
+      budget_guard: object
+      memory_context: object
+      independent_validation: object
+      trace_summary: object
       safety_routing_triggered: boolean
       audit_log_id: string
       disclaimer: "본 서비스는 양육 정보 보조 도구이며, 구체 사안에 대한 법률 자문이 아닙니다."

@@ -1,0 +1,38 @@
+schema: aithor-agent-workflow/v1
+name: jaramlaw-brain
+runtime: src/jaramlaw_agent/memory_rag.py
+purpose: Metadata-only memory recall and capture for repeated workflow operations.
+
+state:
+  redacted_input: object
+  memory_context: object
+  final_report: object
+  captured_record: object
+
+nodes:
+  - id: recall_memory
+    implementation: src/jaramlaw_agent/memory_rag.py::JaramLawMemoryRAG.recall
+    outputs: [memory_context]
+
+  - id: use_as_context_metadata
+    implementation: src/jaramlaw_agent/orchestrator.py::run_workflow
+    inputs: [memory_context]
+    outputs: [final_report.memory_context]
+
+  - id: capture_outcome
+    implementation: src/jaramlaw_agent/memory_rag.py::JaramLawMemoryRAG.capture_outcome
+    inputs: [final_report]
+    outputs: [captured_record]
+
+edges:
+  - from: recall_memory
+    to: use_as_context_metadata
+  - from: use_as_context_metadata
+    to: capture_outcome
+
+safety:
+  memory_is_legal_authority: false
+  store_raw_user_text: false
+  readonly_records: true
+  needs_approval: true
+  pii_redaction_required: true
