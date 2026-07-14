@@ -17,6 +17,7 @@ stdlib (urllib + xml/json) 만 사용 — requests 의존 X.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -51,9 +52,66 @@ class LawApiArticle:
     articles: list[dict[str, str]] = field(default_factory=list)
     raw_xml: Optional[str] = None
 
+    def find_article(self, article_no: str) -> Optional[dict[str, str]]:
+        """'제74조' / '74' 어느 표기로도 조문 1건 조회."""
+        wanted = _normalize_article_no(article_no)
+        if not wanted:
+            return None
+        for art in self.articles:
+            if _normalize_article_no(art.get("article", "")) == wanted:
+                return art
+        return None
+
+
+def _normalize_article_no(raw: str) -> str:
+    """'제74조의2' / '74' / '제74조' → '74' (가지번호는 '74-2')."""
+    if not raw:
+        return ""
+    text = raw.strip()
+    m = re.search(r"(\d+)\s*조(?:\s*의\s*(\d+))?", text)
+    if m:
+        return f"{int(m.group(1))}-{int(m.group(2))}" if m.group(2) else str(int(m.group(1)))
+    m = re.fullmatch(r"\s*(\d+)\s*(?:-\s*(\d+))?\s*", text)
+    if m:
+        return f"{int(m.group(1))}-{int(m.group(2))}" if m.group(2) else str(int(m.group(1)))
+    return text
+
+
+def build_source_url(law_name: str, mst: Optional[str] = None, article_no: Optional[str] = None) -> str:
+    """국가법령정보센터 원문 주소 (인용 4요소의 source_url)."""
+    if mst:
+        url = f"https://www.law.go.kr/DRF/lawService.do?target=law&type=HTML&MST={mst}"
+        if article_no:
+            norm = _normalize_article_no(article_no)
+            if norm:
+                # JO는 6자리: 조번호 4자리 + 가지번호 2자리 (제18조의2 → 001802)
+                main, _, sub = norm.partition("-")
+                if main.isdigit():
+                    url += f"&JO={int(main):04d}{int(sub or 0):02d}"
+        return url
+    return "https://www.law.go.kr/법령/" + urllib.parse.quote(law_name or "")
+
 
 class LawApiError(RuntimeError):
     pass
+
+
+class LawApiAuthError(LawApiError):
+    """OC 키 미등록 / 호출 IP 미등록 — 무대에서 조용히 빈 결과로 보이면 안 되므로 별도 예외."""
+
+
+def _raise_if_error(root: ET.Element, xml_text: str) -> None:
+    """법제처는 인증 실패 시에도 HTTP 200 + <Response><result>...를 준다.
+
+    이걸 잡지 않으면 '결과 0건'과 '인증 실패'가 구분되지 않는다.
+    """
+    if root.tag == "Response":
+        result = (root.findtext("result") or "").strip()
+        msg = (root.findtext("msg") or "").strip()
+        raise LawApiAuthError(f"{result} {msg}".strip() or xml_text[:200])
+    code = (root.findtext("resultCode") or "").strip()
+    if code and code != "00":
+        raise LawApiError(f"resultCode={code} {(root.findtext('resultMsg') or '').strip()}")
 
 
 class LawApiClient:
@@ -105,19 +163,27 @@ class LawApiClient:
         except ET.ParseError as exc:
             raise LawApiError(f"XML parse failed: {exc}\nResponse: {xml_text[:300]}") from exc
 
+        _raise_if_error(root, xml_text)
+
         # 다양한 응답 형식 대응 — <law> 또는 <Law> 요소
         for el in root.iter():
             tag = el.tag.lower()
             if tag in {"law"}:
+                # 법령일련번호(MST)가 lawService의 MST 파라미터. 법령ID는 별개 식별자다.
+                mst = (el.findtext("법령일련번호") or "").strip() or None
+                law_name = (el.findtext("법령명한글") or el.findtext("법령명") or el.findtext("LawName") or "").strip()
+                detail = (el.findtext("법령상세링크") or "").strip()
+                if detail.startswith("/"):
+                    detail = "https://www.law.go.kr" + detail
                 results.append(LawApiSearchResult(
-                    law_name=(el.findtext("법령명한글") or el.findtext("법령명") or el.findtext("LawName") or "").strip(),
-                    law_id=(el.findtext("법령일련번호") or el.findtext("LawID") or "").strip() or None,
-                    law_mst=(el.findtext("법령MST") or el.findtext("LawMst") or "").strip() or None,
+                    law_name=law_name,
+                    law_id=(el.findtext("법령ID") or el.findtext("LawID") or "").strip() or None,
+                    law_mst=mst,
                     promulgation_date=(el.findtext("공포일자") or el.findtext("PromulgationDate") or "").strip() or None,
                     effective_date=(el.findtext("시행일자") or el.findtext("EffectiveDate") or "").strip() or None,
                     department=(el.findtext("소관부처명") or el.findtext("DeptName") or "").strip() or None,
                     law_category=(el.findtext("법령구분명") or "").strip() or None,
-                    detail_url=(el.findtext("법령상세링크") or "").strip() or None,
+                    detail_url=detail or build_source_url(law_name, mst),
                     raw_xml=ET.tostring(el, encoding="unicode"),
                 ))
         return results
@@ -147,20 +213,38 @@ class LawApiClient:
         except ET.ParseError as exc:
             raise LawApiError(f"XML parse failed: {exc}") from exc
 
+        _raise_if_error(root, xml_text)
+
+        # 법령명/시행일자는 <기본정보> 하위에 있어 root.findtext()로는 안 잡힌다 (.// 필요).
+        doc_effective = (root.findtext(".//시행일자") or "").strip() or None
+        doc_name = (root.findtext(".//법령명_한글") or root.findtext(".//법령명한글") or law_name or "").strip()
+        mst_found = (root.findtext(".//법령일련번호") or mst or "").strip() or None
+
         articles: list[dict[str, str]] = []
-        for art in root.iter():
-            tag = art.tag.lower()
-            if tag == "조문단위" or tag == "article" or tag == "조문":
-                articles.append({
-                    "article": (art.findtext("조문번호") or art.findtext("ArticleNo") or "").strip(),
-                    "title": (art.findtext("조문제목") or "").strip(),
-                    "text": (art.findtext("조문내용") or art.findtext("ArticleContent") or "").strip(),
-                })
+        for art in root.iter("조문단위"):
+            # 조문여부='전문'은 장/절 제목("제3장의2 일·가정의 양립 지원")이라 조문이 아니다.
+            # 이걸 걸러내지 않으면 장 번호가 조문번호로 잡혀 엉뚱한 본문이 인용된다.
+            if (art.findtext("조문여부") or "").strip() not in ("", "조문"):
+                continue
+            # 조문내용은 제목줄("제74조(임산부의 보호)")만 담고, 실제 본문은 항/항내용에 있다.
+            head = (art.findtext("조문내용") or "").strip()
+            paragraphs = [(p.findtext("항내용") or "").strip() for p in art.iter("항")]
+            body = "\n".join([head] + [p for p in paragraphs if p]).strip()
+            article_no = (art.findtext("조문번호") or "").strip()
+            sub_no = (art.findtext("조문가지번호") or "").strip()
+            if sub_no:
+                article_no = f"{article_no}-{sub_no}"
+            articles.append({
+                "article": article_no,
+                "title": (art.findtext("조문제목") or "").strip(),
+                "text": body,
+                "effective_date": (art.findtext("조문시행일자") or "").strip() or (doc_effective or ""),
+            })
 
         return LawApiArticle(
-            law_name=(root.findtext("법령명한글") or law_name or "").strip(),
-            law_id=(root.findtext("법령일련번호") or "").strip() or None,
-            effective_date=(root.findtext("시행일자") or "").strip() or None,
+            law_name=doc_name,
+            law_id=mst_found,
+            effective_date=doc_effective,
             articles=articles,
             raw_xml=xml_text[:5000],  # 디버깅용 일부
         )

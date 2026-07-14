@@ -11,6 +11,7 @@ stdlib urllib만 사용 — openai-python 의존 X.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -102,6 +103,35 @@ class OpenAiClient:
         except urllib.error.URLError as exc:
             raise OpenAiError(f"Network error: {exc}") from exc
 
+    # 모델별로 거부하는 파라미터가 다르다 (gpt-5.x: temperature 고정, max_tokens 불가).
+    # 400 응답이 지목한 파라미터를 떼고 재시도한다 — 모델 목록을 하드코딩하지 않기 위함.
+    _PARAM_ALIASES = {"max_tokens": "max_completion_tokens", "max_completion_tokens": "max_tokens"}
+
+    def _post_with_param_fallback(self, payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any]:
+        attempt = dict(payload)
+        last: Optional[OpenAiError] = None
+        for _ in range(max_retries):
+            try:
+                return self._http_post_json(attempt)
+            except OpenAiError as exc:
+                last = exc
+                msg = str(exc)
+                if "HTTP 400" not in msg:
+                    raise
+                bad = re.search(r"'([a-z_]+)' is not supported|Unsupported (?:parameter|value): '([a-z_]+)'", msg)
+                param = None
+                if bad:
+                    param = bad.group(1) or bad.group(2)
+                elif "temperature" in msg:
+                    param = "temperature"
+                if not param or param not in attempt:
+                    raise
+                alias = self._PARAM_ALIASES.get(param)
+                value = attempt.pop(param)
+                if alias and alias not in attempt:
+                    attempt[alias] = value
+        raise last or OpenAiError("param fallback exhausted")
+
     def _build_context_block(self, matched_laws: list[LawArticle]) -> str:
         """retrieve된 법령을 LLM context로 직렬화. citation 강제용."""
         if not matched_laws:
@@ -142,14 +172,15 @@ class OpenAiClient:
                 "content": f"{context_block}\n{family_block}\n## 사용자 질문\n{user_question}\n\n위 컨텍스트만 인용하여 답하라. 컨텍스트 외 법령은 '확실하지 않음' 답."
             },
         ]
-        payload = {
+        # gpt-5.x 계열은 max_tokens/temperature를 거부한다 (max_completion_tokens 사용).
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
         }
         try:
-            resp = self._http_post_json(payload)
+            resp = self._post_with_param_fallback(payload)
         except OpenAiError as exc:
             return LlmAnswer(text="(LLM 호출 실패)", model=self.model, error=str(exc))
 

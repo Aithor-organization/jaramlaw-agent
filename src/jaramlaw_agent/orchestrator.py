@@ -6,6 +6,7 @@ Constitution 5원칙 강제 + audit log 생성.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -20,8 +21,10 @@ from .document_drafter import draft_documents_for_scenario
 from .family_context import build_family_profile
 from .guard import run_guard
 from .human_review import determine_human_review
+from .law_live import LiveLawEnricher
 from .law_retrieval import retrieve_matched_laws
 from .memory_rag import JaramLawMemoryRAG
+from .openai_client import OpenAiClient
 from .model_routing import plan_model_routing
 from .models import (
     CalendarOutput,
@@ -116,6 +119,9 @@ def run_workflow(
     seed_supports_dir: Optional[Path] = None,
     workflow_path: Optional[Path] = None,
     write_audit: bool = True,
+    enable_live_law: bool = True,
+    live_law_budget_s: float = 12.0,
+    enable_ai_answer: bool = True,
 ) -> FinalReport:
     """14노드 워크플로우 실행 → FinalReport.
 
@@ -212,6 +218,10 @@ def run_workflow(
             model_routing=model_routing,
             budget_guard=budget_guard,
             memory_context=memory_context,
+            # 안전 차단은 '조회 실패'가 아니라 '조회를 하지 않기로 한 결정'이다.
+            # 이걸 구분하지 않으면 화면에 조회 실패 경고가 뜬다.
+            law_source={"mode": "blocked", "live_count": 0, "errors": []},
+            ai_answer={"mode": "blocked", "text": "", "used_laws": 0},
         )
         report.independent_validation = run_independent_validation(
             report,
@@ -245,6 +255,22 @@ def run_workflow(
         seed_dir=seed_laws_dir,
     )
     tracer.trace("law_retrieval", matched_laws=len(matched_laws))
+
+    # Node 5-bis: 법제처 실시간 보강 (조문 원문 / 시행일 / 출처주소).
+    # 여기서 얻은 값이 아래 문서초안·권리카드·인용검증에 그대로 흘러간다.
+    # 네트워크가 죽어도 상담은 끝까지 가야 하므로 예외를 밖으로 내보내지 않는다.
+    law_source: dict[str, Any] = {"mode": "seed", "live_count": 0, "errors": []}
+    if enable_live_law and matched_laws:
+        try:
+            status = LiveLawEnricher(total_budget_s=live_law_budget_s).enrich(matched_laws)
+            law_source = asdict(status)
+        except Exception as exc:  # noqa: BLE001 — 무대에서 죽는 것보다 시드로 계속하는 게 낫다
+            law_source["errors"] = [f"{type(exc).__name__}: {exc}"]
+    tracer.trace(
+        "law_live_enrich",
+        mode=law_source.get("mode"),
+        live_count=law_source.get("live_count", 0),
+    )
 
     # Node 6: support_matching
     supports = match_supports(profile, seed_dir=seed_supports_dir)
@@ -285,6 +311,39 @@ def run_workflow(
         attempts=verifier_results.retry_summary.get("attempts_used"),
     )
 
+    # Node 9-bis: 안내 답변 생성 (생성형 AI).
+    # 근거로 넘기는 법령은 '인용 4요소(법령명/조문/시행일/출처주소)를 모두 갖춘 것'뿐이다.
+    # 보류된 인용은 애초에 AI 눈에 보이지 않으므로 화면에도 나갈 수 없다.
+    ai_answer: dict[str, Any] = {"mode": "rule", "text": "", "used_laws": 0}
+    if enable_ai_answer and scenario_query and not safety.triggered:
+        citable = [
+            law for law in matched_laws
+            if law.law_name and law.article and law.effective_date and law.source_url
+        ]
+        ai_answer["citable_laws"] = len(citable)
+        ai_answer["withheld_laws"] = len(matched_laws) - len(citable)
+        client = OpenAiClient(timeout=25.0)
+        if client.enabled() and citable:
+            answer = client.ask(
+                user_question=scenario_query,
+                matched_laws=citable,
+                family_context_summary=f"life_stages={profile.life_stages}, flags={profile.flags}",
+            )
+            if answer.error:
+                ai_answer["error"] = answer.error
+            else:
+                ai_answer.update({
+                    "mode": "llm",
+                    "text": answer.text,
+                    "model": answer.model,
+                    "citations": answer.citations,
+                    "total_tokens": answer.total_tokens,
+                    "used_laws": len(citable),
+                })
+        elif not client.enabled():
+            ai_answer["error"] = "OPENAI_API_KEY 미설정"
+    tracer.trace("ai_answer", mode=ai_answer.get("mode"), used_laws=ai_answer.get("used_laws", 0))
+
     # Node 10: human_review_gate
     human = determine_human_review(
         verifier_results=verifier_results,
@@ -311,6 +370,8 @@ def run_workflow(
         model_routing=model_routing,
         budget_guard=budget_guard,
         memory_context=memory_context,
+        law_source=law_source,
+        ai_answer=ai_answer,
     )
 
     # Final governance gates run after all writer/reviewer outputs are attached.

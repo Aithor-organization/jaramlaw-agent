@@ -100,6 +100,10 @@ class LawArticle:
     # 매칭 점수 (retrieval 단계에서 부여)
     relevance_score: float = 0.0
     applies_reason: list[str] = field(default_factory=list)
+    # 법제처 실시간 보강 결과 (law_live.LiveLawEnricher)
+    official_text: str = ""          # 현행 조문 원문 (API에서 받은 그대로)
+    source_mode: str = "seed"        # live | cache | local | seed
+    live_checked_at: str = ""
 
     def to_legal_basis(self) -> LegalBasis:
         return LegalBasis(
@@ -252,6 +256,10 @@ class FinalReport:
     memory_context: dict[str, Any] = field(default_factory=dict)
     independent_validation: dict[str, Any] = field(default_factory=dict)
     trace_summary: dict[str, Any] = field(default_factory=dict)
+    # 법령 근거를 어디서 가져왔나 (법제처 라이브 / 캐시 / 로컬 / 시드) — 화면에 노출
+    law_source: dict[str, Any] = field(default_factory=dict)
+    # 생성형 AI 안내 답변 (규칙 폴백 시 mode="rule")
+    ai_answer: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

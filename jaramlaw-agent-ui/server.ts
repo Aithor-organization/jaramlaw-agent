@@ -45,7 +45,8 @@ dotenv.config({ path: path.join(PARENT_ROOT, ".env") });
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const PYTHON_BIN = process.env.PYTHON_BIN || "python";
-const PYTHON_TIMEOUT_MS = Number(process.env.JARAMLAW_PYTHON_TIMEOUT_MS || 25000);
+// 법제처 실시간 조회(~2s) + 생성형 AI 답변(~6s)이 들어가면서 25s로는 현장 네트워크에서 빠듯하다.
+const PYTHON_TIMEOUT_MS = Number(process.env.JARAMLAW_PYTHON_TIMEOUT_MS || 45000);
 
 app.use(express.json({ limit: "15mb" }));
 
@@ -702,6 +703,45 @@ function buildFallbackSession(
   };
 }
 
+/**
+ * 법령 근거를 어디서 가져왔는지 한 줄로 — 무대에서 조용히 재현 모드로 넘어가는 것을 막는다.
+ * (발표덱 7p: "청사 네트워크 사정 시 동일 결과 재현 모드로 즉시 전환")
+ */
+function renderLawSourceBadge(report: JsonRecord, language: UiLanguage): string {
+  const src = asRecord(report.law_source);
+  const mode = asString(src.mode, "seed");
+  const live = Number(src.live_count ?? 0);
+  const cache = Number(src.cache_count ?? 0);
+  const local = Number(src.local_count ?? 0);
+  const ms = Number(src.elapsed_ms ?? 0);
+  const en = language === "en";
+
+  if (mode === "blocked") {
+    // 안전 신호로 절차를 멈춘 경우 — 법령 조회를 '안 한' 것이지 '실패한' 게 아니다.
+    return en
+      ? "⛔ Safety routing engaged — legal matching and document generation were stopped on purpose."
+      : "⛔ 안전 신호 감지 — 법령 매칭과 문서 생성을 의도적으로 중단했습니다.";
+  }
+  if (mode === "live") {
+    return en
+      ? `🟢 Live lookup from the Ministry of Government Legislation Open API — ${live} article(s), ${ms}ms (article text, effective date, and source URL fetched now)`
+      : `🟢 법제처 Open API 실시간 조회 ${live}건 · ${ms}ms — 조문 원문·시행일·출처주소를 지금 받아왔습니다`;
+  }
+  if (mode === "cache") {
+    return en
+      ? `🟡 Reproduction mode — network unavailable, using ${cache} previously fetched official article(s) from the Ministry API`
+      : `🟡 재현 모드 — 네트워크 미연결. 법제처에서 이미 받아둔 실제 조문 ${cache}건으로 동일 결과를 재현합니다`;
+  }
+  if (mode === "local") {
+    return en
+      ? `🟡 Reproduction mode — using local current-law corpus (legalize-kr), ${local} article(s)`
+      : `🟡 재현 모드 — 로컬 현행 법령 코퍼스(legalize-kr) ${local}건 사용`;
+  }
+  return en
+    ? "🔴 Seed mode — live legal lookup unavailable (check LAW_API_KEY / network)"
+    : "🔴 시드 모드 — 법제처 실시간 조회 실패 (LAW_API_KEY 또는 네트워크 확인 필요)";
+}
+
 function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLanguage): string {
   const humanReview = asRecord(report.human_review);
   const safety = asRecord(report.safety_routing);
@@ -710,9 +750,31 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
   const rights = asArray(report.rights_cards);
   const verifier = asRecord(report.verifier_results);
   const verifierRatio = Number(verifier.verified_ratio ?? 0);
+  const ai = asRecord(report.ai_answer);
+  const aiText = asString(ai.text).trim();
+  const sourceBadge = renderLawSourceBadge(report, language);
+
+  // 생성형 AI가 쓴 안내문이 있으면 그것이 부모가 읽을 본문이다.
+  // AI에 넘기는 근거는 인용 4요소를 갖춘 조문뿐이라(orchestrator Node 9-bis),
+  // 보류된 인용은 여기까지 오지 못한다.
+  if (asString(ai.mode) === "llm" && aiText) {
+    const withheld = Number(ai.withheld_laws ?? 0);
+    return [
+      sourceBadge,
+      "",
+      aiText,
+      "",
+      "---",
+      language === "en"
+        ? `Grounded on ${Number(ai.citable_laws ?? 0)} fully-cited article(s)${withheld ? `; ${withheld} withheld for incomplete citation` : ""} · supports ${supports.length} · rights cards ${rights.length} · drafts ${docs.length} · verified ${Math.round(verifierRatio * 100)}%`
+        : `인용 4요소를 갖춘 조문 ${Number(ai.citable_laws ?? 0)}건에만 근거${withheld ? ` · 인용 불완전 ${withheld}건은 보류` : ""} · 지원 ${supports.length}건 · 권리카드 ${rights.length}장 · 문서초안 ${docs.length}건 · 검증률 ${Math.round(verifierRatio * 100)}%`,
+    ].join("\n");
+  }
 
   if (language === "en") {
     return [
+      sourceBadge,
+      "",
       "### JaramLaw Python workflow result",
       `- Matched laws: ${laws.length}`,
       `- Support matches: ${supports.length}`,
@@ -727,6 +789,8 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
   }
 
   return [
+    sourceBadge,
+    "",
     "### JaramLaw Python 14-node workflow 결과",
     `- 매칭 법령: ${laws.length}건`,
     `- 지원제도 매칭: ${supports.length}건`,

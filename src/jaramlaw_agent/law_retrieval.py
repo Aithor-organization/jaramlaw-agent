@@ -190,36 +190,6 @@ def retrieve_matched_laws(
     return [law for law, _ in rrf_scored[:top_k]]
 
 
-# === LAW.OS LawApiClient 인터페이스 stub (외부 API) ===
-
-
-class LawApiClient:
-    """LAW.OS law.go.kr 인터페이스 stub.
-
-    환경변수 LAW_API_KEY 설정 시 실제 API 호출 (MVP 미구현).
-    미설정 시 seeded mode — 시드 파일만 사용.
-    """
-
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("LAW_API_KEY", "")
-        self.seeded = not bool(self.api_key)
-
-    def search_current_laws(self, query: str, filters: Optional[dict] = None) -> list[LawArticle]:
-        if self.seeded:
-            # 시드에서 직접 조회
-            laws = load_all_laws()
-            q_tokens = _tokenize_korean(query)
-            return [
-                law for law in laws
-                if any(t in (law.text_summary.lower() + " ".join(law.tags).lower()) for t in q_tokens)
-            ]
-        # MVP 미구현 — 실제 API 호출은 후속
-        raise NotImplementedError("LawApiClient remote mode not implemented in MVP")
-
-    def get_current_law_article(self, law_id: str, article_no: Optional[str] = None) -> Optional[LawArticle]:
-        if self.seeded:
-            for law in load_all_laws():
-                if law.law_id == law_id:
-                    return law
-            return None
-        raise NotImplementedError("LawApiClient remote mode not implemented in MVP")
+# 법제처 실시간 조회는 law_api_client.LawApiClient + law_live.LiveLawEnricher가 담당한다.
+# (여기 있던 동명의 stub 클래스는 remote 모드에서 NotImplementedError를 던져
+#  "실시간 조회가 구현돼 있다"는 착각을 유발했으므로 제거했다.)

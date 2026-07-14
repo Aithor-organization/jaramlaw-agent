@@ -1,5 +1,6 @@
 from jaramlaw_agent.family_context import build_family_profile
-from jaramlaw_agent.law_retrieval import LawApiClient, load_all_laws, retrieve_matched_laws
+from jaramlaw_agent.law_api_client import LawApiClient, _normalize_article_no, build_source_url
+from jaramlaw_agent.law_retrieval import load_all_laws, retrieve_matched_laws
 
 
 def test_load_all_laws():
@@ -64,11 +65,28 @@ def test_retrieve_daycare_accident():
     assert "childcare-15-5" in law_ids
 
 
-def test_law_api_client_seeded_mode():
-    client = LawApiClient(api_key=None)
-    assert client.seeded
-    results = client.search_current_laws("출산휴가")
-    assert results
-    one = client.get_current_law_article("labor-standards-74")
-    assert one is not None
-    assert one.law_id == "labor-standards-74"
+def test_law_api_client_disabled_without_key():
+    """LAW_API_KEY가 없으면 enabled=False — 조용히 빈 결과를 주는 대신 명시적으로 꺼진다."""
+    from jaramlaw_agent.config import Config
+
+    client = LawApiClient(config=Config(law_api_key=None))
+    assert client.enabled() is False
+
+
+def test_normalize_article_no():
+    """'제18조의2' 같은 가지번호 조문이 장(章) 번호와 섞이지 않아야 한다."""
+    assert _normalize_article_no("제74조") == "74"
+    assert _normalize_article_no("74") == "74"
+    assert _normalize_article_no("제18조의2") == "18-2"
+    assert _normalize_article_no("제33조의3") == "33-3"
+
+
+def test_build_source_url_jo_format():
+    """JO는 조번호 4자리 + 가지번호 2자리 (인용 4요소의 출처주소)."""
+    url = build_source_url("근로기준법", mst="265959", article_no="제74조")
+    assert "MST=265959" in url
+    assert "JO=007400" in url
+    sub = build_source_url("남녀고용평등과 일·가정 양립 지원에 관한 법률", mst="276851", article_no="제18조의2")
+    assert "JO=001802" in sub
+    # MST가 없으면 법령명 기반 주소로라도 출처를 채운다
+    assert build_source_url("근로기준법").startswith("https://www.law.go.kr/")
