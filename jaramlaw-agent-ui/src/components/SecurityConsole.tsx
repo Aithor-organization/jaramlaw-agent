@@ -216,7 +216,7 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
               <button
                 onClick={handleEncrypt}
                 disabled={encrypting || !inputText}
-                className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 transition-colors cursor-pointer"
               >
                 {encrypting ? (
                   <>
@@ -248,7 +248,7 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
                 <button
                   onClick={handleDecrypt}
                   disabled={decrypting || !cipherText}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300 rounded-lg hover:bg-purple-100 border border-purple-200/50 disabled:opacity-50 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300 rounded-lg hover:bg-purple-100 border border-purple-200/50 disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 transition-colors cursor-pointer"
                 >
                   {decrypting ? (
                     <>
@@ -273,18 +273,18 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
               <div className="bg-white dark:bg-slate-950 p-3 rounded font-mono text-xs text-slate-800 dark:text-slate-100 h-24 border border-slate-200/60 dark:border-slate-850 overflow-y-auto">
                 {decryptedText ? (
                   <div className="space-y-1">
-                    <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/10 px-1 py-0.5 rounded w-max">
+                    <div className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/10 px-1 py-0.5 rounded w-max">
                       <CheckCircle className="w-3 h-3" /> Integrity Check: OK (TLS Verified)
                     </div>
                     <p className="text-slate-800 dark:text-slate-200">{decryptedText}</p>
                   </div>
                 ) : (
-                  <span className="text-slate-400 text-xs">
+                  <span className="text-slate-600 text-xs">
                     {isEn ? "Decrypted outcomes will be displayed here..." : "암호화 무결 복원 버튼 클릭 시, 가로챈 복호 텍스트 데이터가 출력됩니다."}
                   </span>
                 )}
               </div>
-              <p className="text-[9px] text-slate-400 mt-2">
+              <p className="text-[9px] text-slate-600 mt-2">
                 * {isEn ? "AES-GCM guarantees both confidentiality and ciphertext authenticity (integrity check)." : "AES-GCM은 대칭키 기밀성을 충족시키면서, 일방적 위변조 시 복화 단계에서 자동 무효 조치합니다."}
               </p>
             </div>
@@ -300,8 +300,8 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
             <div className="border border-slate-150 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/30 text-center flex flex-col items-center">
               <Server className="w-10 h-10 text-blue-600 mb-2" />
               <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">JaramLaw Desk PC Client</span>
-              <span className="text-[10px] text-slate-400 font-mono mt-1">IP: 192.168.1.185 (Secured)</span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-900/15 px-2 py-0.5 rounded-full font-bold mt-3 border border-emerald-100 dark:border-emerald-900/20">
+              <span className="text-[10px] text-slate-600 font-mono mt-1">IP: 192.168.1.185 (Secured)</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 dark:bg-emerald-900/15 px-2 py-0.5 rounded-full font-bold mt-3 border border-emerald-100 dark:border-emerald-900/20">
                 ● Master Authority
               </span>
             </div>
@@ -318,11 +318,11 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
             <div className="border border-slate-150 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/30 text-center flex flex-col items-center">
               <Smartphone className="w-10 h-10 text-purple-600 mb-2" />
               <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">Samsung Mobile Terminal</span>
-              <span className="text-[10px] text-slate-400 font-mono mt-1">ID: HW-SM-992F (TLS Verified)</span>
+              <span className="text-[10px] text-slate-600 font-mono mt-1">ID: HW-SM-992F (TLS Verified)</span>
               <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold mt-3 border ${
                 syncStatus === "completed"
-                  ? "text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-900/25"
-                  : "text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-900/25"
+                  ? "text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-900/25"
+                  : "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-900/25"
               }`}>
                 {syncStatus === "completed" ? "✓ Fully Synced" : "● Sync Divergent (4 Pending)"}
               </span>
@@ -343,7 +343,7 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
             <button
               onClick={handleTriggerSync}
               disabled={syncing}
-              className="inline-flex items-center gap-1 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 hover:shadow transition"
+              className="inline-flex items-center gap-1 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 hover:shadow transition"
               id="sync-trigger-button"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
@@ -361,17 +361,17 @@ export const SecurityConsole: React.FC<SecurityConsoleProps> = ({ language }) =>
               <Database className="w-4 h-4 text-blue-600" />
               {isEn ? "Real-time Access & Encrypted Audit Ledger" : "실시간 백엔드 기밀 연산 및 접근 기록"}
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">Auto updates every 8s</span>
+            <span className="text-[10px] text-slate-600 font-mono">Auto updates every 8s</span>
           </div>
 
           <div className="bg-slate-950 rounded-xl p-3 border border-neutral-900 h-64 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-2">
             {logs.length === 0 ? (
-              <p className="text-slate-500 text-center py-12">No active logs captured.</p>
+              <p className="text-slate-400 text-center py-12">No active logs captured.</p>
             ) : (
               logs.map((log) => (
                 <div key={log.id} className="border-b border-neutral-900 pb-1.5 last:border-0 hover:bg-slate-900/20 p-1 rounded">
                   <div className="flex flex-wrap justify-between items-center gap-1.5">
-                    <span className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <span className="text-[10px] text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
                     <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${getLogBadge(log.type)}`}>
                       {log.type}
                     </span>

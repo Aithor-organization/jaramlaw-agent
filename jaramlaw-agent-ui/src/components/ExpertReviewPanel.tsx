@@ -64,14 +64,14 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
 
           <div className="flex justify-between items-start gap-4">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center bg-emerald-600 text-white rounded-full p-1.5 shadow">
+              <span className="inline-flex items-center justify-center bg-emerald-700 text-white rounded-full p-1.5 shadow">
                 <UserCheck className="w-4.5 h-4.5" />
               </span>
               <div>
-                <span className="text-[10px] font-bold text-emerald-600 block tracking-wider uppercase">
+                <span className="text-[10px] font-bold text-emerald-700 block tracking-wider uppercase">
                   {isEn ? "Legal Board Verified Audit" : "전문가 검토 완료"}
                 </span>
-                <h4 className="text-sm font-bold text-slate-850 dark:text-slate-100">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
                   {session.expertFeedback.reviewerName}
                 </h4>
               </div>
@@ -96,7 +96,7 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
             "{session.expertFeedback.feedbackText}"
           </p>
 
-          <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 pl-8 font-mono">
+          <div className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-500 pl-8 font-mono">
             <span>{isEn ? "Audit Locked" : "검토 서명 완료"}</span>
             <span>{new Date(session.expertFeedback.reviewedAt).toLocaleString()}</span>
           </div>
@@ -106,11 +106,11 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
       {/* Editor Loop Form: Always render to allow modifications or signing */}
       <div className="space-y-4 mt-4">
         <div className="border-t border-slate-200/60 dark:border-slate-800 pt-4">
-          <span className="text-xs font-bold text-slate-850 dark:text-slate-100 flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Edit className="w-4 h-4 text-teal-600" />
             {isEn ? "AI-Assisted Legal Expert Feedback Loop" : "전문가 검토 및 보완 메모"}
           </span>
-          <p className="text-[10px] text-slate-400 mt-0.5">
+          <p className="text-[10px] text-slate-600 mt-0.5">
             {isEn
               ? "Modify context, overwrite references, and authorize the legal advice correctness"
               : "전문가가 상담 내용을 보완하고 최종 확인 여부를 기록합니다."}
@@ -146,12 +146,12 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
                 >
                   <Star
                     className={`w-5 h-5 ${
-                      star <= rating ? "fill-amber-400 text-amber-400" : "text-slate-350 dark:text-slate-700"
+                      star <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300 dark:text-slate-700"
                     }`}
                   />
                 </button>
               ))}
-              <span className="text-xs font-bold text-amber-500 font-mono ml-2">({rating}.0 / 5.0)</span>
+              <span className="text-xs font-bold text-amber-700 font-mono ml-2">({rating}.0 / 5.0)</span>
             </div>
           </div>
         </div>
@@ -162,7 +162,7 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
             {isEn ? "Expert Review Commentary & Addendum Codes" : "보완 의견"}
           </span>
           <textarea
-            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-850 dark:text-slate-100 focus:ring-1 focus:ring-teal-500 outline-none leading-relaxed"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-teal-500 outline-none leading-relaxed"
             rows={3}
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
@@ -172,8 +172,8 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
 
         {/* Actions panel */}
         <div className="flex flex-col sm:flex-row justify-between items-center bg-white dark:bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-200/50 dark:border-slate-850 gap-4">
-          <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[10px]">
-            <Star className="w-3.5 h-3.5 fill-slate-350" />
+          <div className="flex items-center gap-1.5 text-slate-600 font-mono text-[10px]">
+            <Star className="w-3.5 h-3.5 fill-slate-300" />
             <span>{isEn ? "Revision index" : "검토 상태"}: {session.expertFeedback ? "저장됨" : "대기"}</span>
           </div>
 
@@ -181,7 +181,7 @@ export const ExpertReviewPanel: React.FC<ExpertReviewPanelProps> = ({ session, l
             <button
               onClick={() => handleSaveReview("verified")}
               disabled={saving}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 hover:shadow transition cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 hover:shadow transition cursor-pointer"
               id="expert-verify-author-button"
             >
               <Save className="w-3.5 h-3.5" />

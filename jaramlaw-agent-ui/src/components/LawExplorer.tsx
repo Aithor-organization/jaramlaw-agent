@@ -108,7 +108,7 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
 
           {/* Search text inputs */}
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-slate-400" />
+            <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-slate-600" />
             <input
               type="text"
               className="w-full bg-[#f8fafc] dark:bg-[#0b1329] border border-slate-200 dark:border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
@@ -121,7 +121,7 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
           {/* Laws visual list grids */}
           <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
             {filteredLaws.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-16">No matched laws found. Try '육아휴직' or '학원법'.</p>
+              <p className="text-xs text-slate-600 text-center py-16">No matched laws found. Try '육아휴직' or '학원법'.</p>
             ) : (
               filteredLaws.map((law) => (
                 <div
@@ -141,7 +141,7 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
                       Relevance {law.relevance}%
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 block font-mono mt-1">{law.clause}</span>
+                  <span className="text-[10px] text-slate-600 block font-mono mt-1">{law.clause}</span>
                   <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mt-2.5">
                     {law.summary}
                   </p>
@@ -157,16 +157,16 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
         {/* Law precise detail sheet */}
         {selectedLaw ? (
           <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-xs">
-            <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase font-mono block border-b border-slate-150 dark:border-slate-850 pb-1.5">
+            <span className="text-[10px] font-bold text-slate-600 tracking-wider uppercase font-mono block border-b border-slate-150 dark:border-slate-850 pb-1.5">
               🎓 Selected Article Analysis Sheet
             </span>
             <div className="space-y-1">
               <h4 className="text-sm font-bold text-slate-900 dark:text-slate-50">{selectedLaw.title}</h4>
-              <span className="text-[10px] text-slate-400 block font-mono">{selectedLaw.clause}</span>
+              <span className="text-[10px] text-slate-600 block font-mono">{selectedLaw.clause}</span>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-900/40 p-3.5 rounded-lg border border-slate-150 dark:border-slate-800 space-y-1.5">
-              <span className="text-[10px] font-bold text-slate-400 block">Codified Statutory Textbook Text (법문 원어)</span>
+              <span className="text-[10px] font-bold text-slate-600 block">Codified Statutory Textbook Text (법문 원어)</span>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-semibold">
                 "{selectedLaw.summary}"
               </p>
@@ -183,7 +183,7 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
             </div>
           </div>
         ) : (
-          <div className="bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center text-slate-400 text-xs shadow-xs">
+          <div className="bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center text-slate-600 text-xs shadow-xs">
             {isEn ? "Select law article on the left list to see full practical applications" : "왼쪽 색인 리스트에서 특정 법안 보관 번호를 누르면 정밀 소송 판례 적용 분석 시트가 활성화됩니다."}
           </div>
         )}
@@ -237,7 +237,7 @@ export const LawExplorer: React.FC<LawExplorerProps> = ({ language }) => {
 
           {/* Engine Health indicator block */}
           <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-mono">Platform Health Score</span>
+            <span className="text-slate-400 font-mono">Platform Health Score</span>
             <span className="font-bold text-emerald-400 flex items-center gap-1">
               <Zap className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
               Optimal Latency - 180ms (A+)

@@ -129,9 +129,9 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 70) return "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900/30";
-    if (score >= 40) return "text-amber-500 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30";
-    return "text-red-500 bg-red-50 dark:bg-red-950/20 dark:border-red-900/30";
+    if (score >= 70) return "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900/30";
+    if (score >= 40) return "text-amber-700 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30";
+    return "text-red-700 bg-red-50 dark:bg-red-950/20 dark:border-red-900/30";
   };
 
   return (
@@ -144,7 +144,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               <Upload className="w-4.5 h-4.5 text-blue-600" />
               {isEn ? "Contract/Document Analyzer" : "신규 계약 보증서 분석/업로드"}
             </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-slate-600 mt-0.5">
               {isEn ? "Support drag-and-drop or select preloaded templates to discover toxic clauses" : "계약서 약정 텍스트를 드래그 앤 드롭하거나 서식을 기재해 불합리한 독소 조항을 수사하십시오."}
             </p>
           </div>
@@ -161,18 +161,18 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               onChange={handleFileSelect}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
-            <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
               {docTitle || (isEn ? "Drop txt/doc file here or click" : "원 서식 파일 드래그 또는 수동 파일 첨부")}
             </span>
-            <span className="text-[10px] text-slate-400 mt-1 block">
+            <span className="text-[10px] text-slate-600 mt-1 block">
               {isEn ? "Supports .txt up to 10MB" : "텍스트 및 영문/국문 로컬 파일 지원 (최대 10MB)"}
             </span>
           </div>
 
           {/* Quick template pick list */}
           <div className="space-y-2">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+            <span className="text-[10px] uppercase font-bold text-slate-600 block tracking-wider">
               {isEn ? "Quick Selection Preloads" : "전문 예시 계약특약 간편 탐방"}
             </span>
             <div className="grid grid-cols-1 gap-2">
@@ -185,7 +185,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
                   <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-0.5 break-all">
                     📄 {tpl.title}
                   </span>
-                  <span className="text-[10px] text-slate-400 block truncate">{tpl.text}</span>
+                  <span className="text-[10px] text-slate-600 block truncate">{tpl.text}</span>
                 </button>
               ))}
             </div>
@@ -208,7 +208,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
           <button
             onClick={triggerAnalysis}
             disabled={analyzing || !customText}
-            className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 hover:shadow-xs disabled:opacity-50 transition cursor-pointer"
+            className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 hover:shadow-xs disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 transition cursor-pointer"
             id="run-analysis-button"
           >
             {analyzing ? (
@@ -232,7 +232,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
           </span>
           <div className="space-y-2 h-48 overflow-y-auto pr-1">
             {documents.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-10">No document analyzed yet.</p>
+              <p className="text-xs text-slate-600 text-center py-10">No document analyzed yet.</p>
             ) : (
               documents.map((doc) => (
                 <button
@@ -247,7 +247,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block truncate">
                     💼 {doc.title}
                   </span>
-                  <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1 font-mono">
+                  <div className="flex justify-between items-center text-[10px] text-slate-600 mt-1 font-mono">
                     <span>{new Date(doc.date).toLocaleDateString()}</span>
                     <span>{(doc.length / 1024).toFixed(2)} KB</span>
                   </div>
@@ -265,7 +265,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
             {/* Active File Title Block */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-600 font-mono uppercase tracking-wider block">
                   {isEn ? "Audit Report Invoice" : "서명 특약 독소 조항 평가 진단서"}
                 </span>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-50 mt-0.5">
@@ -275,7 +275,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               <div className={`px-4 py-2 border rounded-xl flex items-center gap-1.5 font-bold ${getScoreColor(activeDoc.analysisScore || 60)}`}>
                 <span className="text-2xl font-mono">{activeDoc.analysisScore || 60}</span>
                 <div className="text-left font-sans">
-                  <span className="text-[9px] text-slate-400 block tracking-wide uppercase">Safety Score</span>
+                  <span className="text-[9px] text-slate-600 block tracking-wide uppercase">Safety Score</span>
                   <span className="text-[10px] block">
                     {(activeDoc.analysisScore || 60) >= 70
                       ? (isEn ? "Fair/Equal" : "권익 대칭")
@@ -289,7 +289,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
 
             {/* Overall summary section */}
             <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-350 flex items-center gap-1 border-b border-slate-100 dark:border-slate-800 pb-1.5 uppercase tracking-wide">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-300 flex items-center gap-1 border-b border-slate-100 dark:border-slate-800 pb-1.5 uppercase tracking-wide">
                 ⚖ {isEn ? "Senior AI Analysis Assessment" : "AI 변론 수석 소견"}
               </span>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl">
@@ -306,7 +306,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               <ul className="grid grid-cols-1 gap-2">
                 {activeDoc.coreArguments.map((arg, idx) => (
                   <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/10 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                    <span className="text-blue-500 font-bold text-xs">[{idx+1}]</span>
+                    <span className="text-blue-700 font-bold text-xs">[{idx+1}]</span>
                     <span className="leading-relaxed">{arg}</span>
                   </li>
                 ))}
@@ -322,7 +322,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               <ul className="grid grid-cols-1 gap-2">
                 {activeDoc.criticalRisks.map((risk, idx) => (
                   <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-rose-50/35 dark:bg-rose-950/5 p-2.5 rounded-lg border border-rose-100/50 dark:border-rose-900/20">
-                    <span className="text-rose-500 font-bold text-xs select-none">⚠️</span>
+                    <span className="text-rose-700 font-bold text-xs select-none">⚠️</span>
                     <span className="leading-relaxed">{risk}</span>
                   </li>
                 ))}
@@ -338,7 +338,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               <ul className="grid grid-cols-1 gap-2">
                 {activeDoc.actionableSteps.map((step, idx) => (
                   <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/20 p-2.5 rounded-lg border border-slate-150 dark:border-slate-800">
-                    <span className="text-emerald-600 font-bold font-mono">[{idx+1}]</span>
+                    <span className="text-emerald-700 font-bold font-mono">[{idx+1}]</span>
                     <span className="leading-relaxed font-sans">{step}</span>
                   </li>
                 ))}
@@ -362,12 +362,12 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
             )}
           </div>
         ) : (
-          <div className="border border-slate-150 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950 p-12 text-center text-slate-400 flex flex-col justify-center items-center h-full">
+          <div className="border border-slate-150 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950 p-12 text-center text-slate-600 flex flex-col justify-center items-center h-full">
             <FileText className="w-12 h-12 text-slate-300 mb-2" />
-            <h4 className="font-bold text-slate-700 dark:text-slate-350">
+            <h4 className="font-bold text-slate-700 dark:text-slate-300">
               {isEn ? "No Document Active" : "불러올 진단서가 없습니다."}
             </h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm">
+            <p className="text-xs text-slate-600 mt-1 max-w-sm">
               {isEn ? "Please upload contract or choose templates on the left sidebar to generate detailed safety report" : "좌측 사이드바에서 약정을 불러오거나 파일을 투입해 정밀 진단을 발급하십시오."}
             </p>
           </div>

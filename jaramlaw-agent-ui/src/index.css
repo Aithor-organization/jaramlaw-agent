@@ -241,7 +241,7 @@
     gap: 0.25rem 0.55rem;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.7);
-    background: rgba(255, 255, 255, 0.68);
+    background: rgba(255, 255, 255, 0.88);
     color: #24312d;
     padding: 0.8rem;
     backdrop-filter: blur(18px) saturate(130%);
@@ -256,7 +256,7 @@
   .visual-metric span,
   .visual-metric em {
     overflow: hidden;
-    color: #66706d;
+    color: #464f4c;
     font-size: 0.72rem;
     font-style: normal;
     font-weight: 800;
@@ -588,7 +588,7 @@
   .primary-button:disabled {
     border-color: rgba(65, 88, 78, 0.12);
     background: #dfe6e2;
-    color: #6f7d82;
+    color: #3f4a4f;
     cursor: not-allowed;
     box-shadow: none;
   }
@@ -649,7 +649,7 @@
   }
 
   .chat-message time {
-    color: #7a878c;
+    color: #5a6569;
     font-size: 0.68rem;
     font-weight: 700;
   }

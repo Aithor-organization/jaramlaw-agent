@@ -48,9 +48,9 @@ export const DisputeChart: React.FC<DisputeChartProps> = ({ analysis, language }
   ];
 
   const getScoreColor = (score: number) => {
-    if (score >= 70) return "text-red-500 bg-red-50 dark:bg-red-950/25";
-    if (score >= 40) return "text-amber-500 bg-amber-50 dark:bg-amber-950/25";
-    return "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/25";
+    if (score >= 70) return "text-red-700 bg-red-50 dark:bg-red-950/25";
+    if (score >= 40) return "text-amber-700 bg-amber-50 dark:bg-amber-950/25";
+    return "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/25";
   };
 
   const barData = Object.entries({
@@ -67,7 +67,7 @@ export const DisputeChart: React.FC<DisputeChartProps> = ({ analysis, language }
       {/* Title block */}
       <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900 px-4 py-3 rounded-lg border border-slate-100 dark:border-slate-800">
         <div>
-          <span className="text-xs font-mono text-slate-400 block uppercase tracking-wider">
+          <span className="text-xs font-mono text-slate-600 block uppercase tracking-wider">
             {isEn ? "Conflict Forecast Engine" : "분쟁 정밀 계측 엔진 v2.1"}
           </span>
           <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -158,7 +158,7 @@ export const DisputeChart: React.FC<DisputeChartProps> = ({ analysis, language }
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-slate-400 mt-2 text-center">
+          <p className="text-[10px] text-slate-600 mt-2 text-center">
             {isEn ? "*Higher Evidence & Precedent scores reduce overall litigation risk" : "*유효 증거 수집력 및 판례 일치율이 높을수록 최종 리스크가 하락 조정됩니다."}
           </p>
         </div>
@@ -172,7 +172,7 @@ export const DisputeChart: React.FC<DisputeChartProps> = ({ analysis, language }
         <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
           {analysis.recommendations.map((rec, i) => (
             <li key={i} className="flex gap-2">
-              <span className="text-amber-600 font-bold font-mono select-none flex-shrink-0">[{i+1}]</span>
+              <span className="text-amber-700 font-bold font-mono select-none flex-shrink-0">[{i+1}]</span>
               <span className="leading-relaxed">{rec}</span>
             </li>
           ))}
