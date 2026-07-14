@@ -18,12 +18,14 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from .agentshield_bridge import resilient_call
 from .config import Config, redact_secret
 
 
@@ -100,6 +102,10 @@ class LawApiAuthError(LawApiError):
     """OC 키 미등록 / 호출 IP 미등록 — 무대에서 조용히 빈 결과로 보이면 안 되므로 별도 예외."""
 
 
+class LawApiPermanentError(LawApiError):
+    """재시도해도 소용없는 응답 (4xx, 429 제외). 재시도 대상에서 제외한다."""
+
+
 def _raise_if_error(root: ET.Element, xml_text: str) -> None:
     """법제처는 인증 실패 시에도 HTTP 200 + <Response><result>...를 준다.
 
@@ -131,10 +137,30 @@ class LawApiClient:
 
     def _http_get(self, url: str) -> str:
         req = urllib.request.Request(url, headers={"User-Agent": "jaramlaw-agent/0.1"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = resp.read()
-            charset = resp.headers.get_content_charset() or "utf-8"
-            return data.decode(charset, errors="replace")
+
+        def _send() -> str:
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    data = resp.read()
+                    charset = resp.headers.get_content_charset() or "utf-8"
+                    return data.decode(charset, errors="replace")
+            except urllib.error.HTTPError as exc:
+                if 400 <= exc.code < 500 and exc.code != 429:
+                    raise LawApiPermanentError(f"HTTP {exc.code}") from exc
+                raise LawApiError(f"HTTP {exc.code}") from exc
+            except urllib.error.URLError as exc:
+                raise LawApiError(f"Network error: {exc}") from exc
+
+        # 재시도는 2회까지만 — LiveLawEnricher의 총 예산(기본 12초)을 넘기면 안 된다.
+        # (호출당 5초 × 2회 + 백오프 0.2초 ≈ 10.2초.) 법제처가 연속으로 죽으면 회로를
+        # 열어, 15개 법령을 각각 5초씩 기다리는 대신 즉시 시드로 떨어진다.
+        return resilient_call(
+            "law_api",
+            _send,
+            max_attempts=2,
+            retry_on=(LawApiError,),
+            no_retry_on=(LawApiPermanentError,),
+        )
 
     def search_laws(self, query: str, display: int = 10, search_mode: int = 1) -> list[LawApiSearchResult]:
         """법령 검색 (lawSearch.do).

@@ -1,0 +1,70 @@
+name: CI
+
+# The repository had no CI at all before this file. Every quality gate — tests, import
+# health, the maintenance gate — was something a person had to remember to run.
+#
+# Two things this job is deliberate about:
+#
+# 1. NO SECRETS. The suite degrades when OPENAI_API_KEY / LAW_API_KEY are absent
+#    (live-law falls back to the seed corpus, answers fall back to rule mode), so an
+#    unkeyed run is offline and fast — ~3s for the full suite. CI therefore needs no
+#    secrets to be useful, and a test that starts *requiring* a key is itself a
+#    regression worth failing on: production has to survive an expired key too.
+#
+# 2. AgentShield is checked out as a sibling. src/jaramlaw_agent/agentshield_bridge.py
+#    resolves `agent_shield` from ../AgentShield/src (or $AGENTSHIELD_PATH) and degrades
+#    to AGENTSHIELD_AVAILABLE=False when it is missing — but tests/test_agentshield_
+#    integration.py imports `agent_shield` directly, so without the sibling it does not
+#    skip, it errors. That is why the checkout below is not optional decoration.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout jaramlaw-agent
+        uses: actions/checkout@v4
+        with:
+          path: jaramlaw-agent
+
+      - name: Checkout AgentShield (security bridge dependency)
+        id: shield
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: Aithor-organization/AgentShield
+          path: AgentShield
+          token: ${{ secrets.AGENTSHIELD_READ_TOKEN || github.token }}
+
+      - name: Report a missing AgentShield instead of a bare ModuleNotFoundError
+        if: steps.shield.outcome != 'success'
+        run: |
+          echo "::error::AgentShield sibling repo could not be checked out. tests/test_agentshield_integration.py imports agent_shield directly and will fail with ModuleNotFoundError. Fix by configuring the AGENTSHIELD_READ_TOKEN secret, or by making that test file skip when AGENTSHIELD_AVAILABLE is False (the bridge already degrades correctly — only the test hard-imports)."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        working-directory: jaramlaw-agent
+        run: pip install -e '.[dev]'
+
+      - name: Tests (offline — no API keys)
+        working-directory: jaramlaw-agent
+        env:
+          AGENTSHIELD_PATH: ${{ github.workspace }}/AgentShield
+        run: python -m pytest -q
+
+      - name: Package imports without a config
+        # Catches the class of break where a module-level constant or import only
+        # resolves on a machine that happens to have a .env sitting next to it.
+        working-directory: jaramlaw-agent
+        run: python -c "import jaramlaw_agent; from jaramlaw_agent import orchestrator, cli"

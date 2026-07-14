@@ -11,6 +11,19 @@ from enum import Enum
 from typing import Any, Optional
 
 
+def parse_effective_date(value: Optional[str]) -> Optional[date]:
+    """시행일 문자열 → date. `2026-10-29` / `20261029` 모두 허용. 실패 시 None."""
+    if not value:
+        return None
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    if len(digits) != 8:
+        return None
+    try:
+        return date(int(digits[:4]), int(digits[4:6]), int(digits[6:8]))
+    except ValueError:
+        return None
+
+
 class LifeStage(str, Enum):
     PREGNANCY = "pregnancy"
     INFANT = "infant"          # 만 0세
@@ -112,6 +125,18 @@ class LawArticle:
             effective_date=self.effective_date,
             source_url=self.source_url,
         )
+
+    def is_effective_on(self, ref_date: date) -> bool:
+        """기준일에 이미 시행 중인가.
+
+        시행일이 기준일보다 미래면 False — 아직 시행되지 않은 조문이므로
+        현행 법령처럼 인용하면 잘못된 조언이 된다.
+        시행일을 파싱할 수 없으면 판정을 보류하고 True (기존 동작 유지).
+        """
+        parsed = parse_effective_date(self.effective_date)
+        if parsed is None:
+            return True
+        return parsed <= ref_date
 
 
 @dataclass
@@ -254,12 +279,18 @@ class FinalReport:
     model_routing: dict[str, Any] = field(default_factory=dict)
     budget_guard: dict[str, Any] = field(default_factory=dict)
     memory_context: dict[str, Any] = field(default_factory=dict)
+    learning: dict[str, Any] = field(default_factory=dict)
+    adversarial_critic: dict[str, Any] = field(default_factory=dict)
     independent_validation: dict[str, Any] = field(default_factory=dict)
     trace_summary: dict[str, Any] = field(default_factory=dict)
     # 법령 근거를 어디서 가져왔나 (법제처 라이브 / 캐시 / 로컬 / 시드) — 화면에 노출
     law_source: dict[str, Any] = field(default_factory=dict)
     # 생성형 AI 안내 답변 (규칙 폴백 시 mode="rule")
     ai_answer: dict[str, Any] = field(default_factory=dict)
+    # AgentShield 런타임 가드 실측 결과 (배선 여부/입력·출력 판정).
+    # available=False면 AgentShield를 못 찾아 로컬 guard로만 돌았다는 뜻 —
+    # "연결했다"는 주장이 아니라 실측을 싣는다.
+    agentshield: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

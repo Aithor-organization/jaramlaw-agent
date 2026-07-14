@@ -1,0 +1,177 @@
+{
+  "name": "jaramlaw-agent",
+  "version": "0.1.0",
+  "_notes": {
+    "purpose": "AgentLoop lifecycle policy for the pre-deploy maintenance gate. See docs/operational-readiness.md.",
+    "slos": "Declared operational contract. latencyP99Ms mirrors the orchestrator's own 25s run budget; costUsd/singleRequestCapUsd mirror budget_guard's real per-run limit ($0.25) rather than an invented number.",
+    "baselines": "Filled by `python scripts/run_agentloop_gate.py --update-baseline` from measured audit_logs. Never hand-write a baseline: a fabricated number is indistinguishable from a measured one at the gate.",
+    "rollout": "autoRollback is false on purpose — this repo has no canary/rollback infrastructure, so an error must surface as `block` (stop the deploy), not as a `rollback` action that nothing can execute."
+  },
+  "slos": {
+    "quality": 0.97,
+    "safety": 0.99,
+    "latencyMs": 15000,
+    "latencyP95Ms": 20000,
+    "latencyP99Ms": 25000,
+    "costUsd": 0.25,
+    "errorBudget": 0.05,
+    "auditCompleteness": 1,
+    "traceCompleteness": 1.0
+  },
+  "rollout": {
+    "strategy": "manual",
+    "stages": [
+      100
+    ],
+    "autoRollback": false
+  },
+  "thresholds": {
+    "driftDistance": 0.18,
+    "qualityDrop": 0.03,
+    "safetyDrop": 0.01,
+    "costIncreaseRatio": 1.2,
+    "latencyIncreaseRatio": 1.25,
+    "staleDays": 30,
+    "maxToolsPerAgent": 10,
+    "singleRequestCapUsd": 0.25,
+    "budgetWarnRatio": 1.5,
+    "budgetHardCapRatio": 2,
+    "spendRateAnomalyMultiplier": 5,
+    "errorBudgetBurnWarn": 1,
+    "errorBudgetBurnCritical": 2,
+    "mttrEscalateMinutes": 5,
+    "judgeScoreMin": 0.7,
+    "judgeRegressionDrop": 0.05,
+    "trajectoryDriftMax": 0.34,
+    "trajectoryStepInflation": 1.5
+  },
+  "components": [
+    {
+      "id": "agent:jaramlaw",
+      "type": "agent",
+      "version": "0.1.0",
+      "dependsOn": [
+        "workflow:consult",
+        "model:classify",
+        "model:answer",
+        "model:draft",
+        "prompt:answer-system",
+        "rag:law-index",
+        "tool:law-api",
+        "tool:audit-log"
+      ],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "latencyMs": 7234.683333333333,
+        "outputSignature": "llm|ai_answer.board_opinions.budget_guard.calendar.disclaimer.draft_documents.family_profile.generated_at.human_review.independent_validation.law_source.matched_laws.memory_context.model_routing.rights_cards.safety_routing.scenario_id.trace_summary.verifier_results.workflow_version",
+        "judge": {
+          "scores": {
+            "citation_integrity": 1.0,
+            "independent_validation": 1.0
+          }
+        },
+        "trajectory": {
+          "toolSequence": [
+            "workflow_start",
+            "input_guard",
+            "model_routing",
+            "budget_guard",
+            "memory_recall",
+            "family_context",
+            "law_retrieval",
+            "law_live_enrich",
+            "support_matching",
+            "document_drafter",
+            "rights_card_gen",
+            "calendar_gen",
+            "parallel_expert_board",
+            "verify_atomic_claims",
+            "ai_answer",
+            "human_review_gate",
+            "independent_validation",
+            "memory_capture"
+          ],
+          "stepCount": 18
+        }
+      }
+    },
+    {
+      "id": "workflow:consult",
+      "type": "workflow",
+      "version": "family-legal-jaramlaw/v1",
+      "dependsOn": [
+        "tool:law-api",
+        "rag:law-index"
+      ],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {
+        "outputSignature": "llm|ai_answer.board_opinions.budget_guard.calendar.disclaimer.draft_documents.family_profile.generated_at.human_review.independent_validation.law_source.matched_laws.memory_context.model_routing.rights_cards.safety_routing.scenario_id.trace_summary.verifier_results.workflow_version"
+      }
+    },
+    {
+      "id": "model:classify",
+      "type": "model",
+      "version": "gpt-5.4-nano",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {}
+    },
+    {
+      "id": "model:answer",
+      "type": "model",
+      "version": "gpt-5.6-luna",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {}
+    },
+    {
+      "id": "model:draft",
+      "type": "model",
+      "version": "gpt-5.6-terra",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {}
+    },
+    {
+      "id": "prompt:answer-system",
+      "type": "prompt",
+      "version": "0.1.0",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {}
+    },
+    {
+      "id": "rag:law-index",
+      "type": "rag_index",
+      "version": "law-cache/v1",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {
+        "outputSignature": "cached=13"
+      }
+    },
+    {
+      "id": "tool:law-api",
+      "type": "tool",
+      "version": "law.go.kr-open-api",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {
+        "latencyMs": 628.0,
+        "outputSignature": "mode=live"
+      }
+    },
+    {
+      "id": "tool:audit-log",
+      "type": "tool",
+      "version": "jaramlaw-audit/v1",
+      "dependsOn": [],
+      "lastEvaluatedAt": "2026-07-14T00:00:00.000Z",
+      "baseline": {}
+    }
+  ],
+  "_baselineMeasuredAt": "2026-07-14T12:01:25.488960Z",
+  "_baselineRuns": 4
+}

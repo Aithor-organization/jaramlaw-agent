@@ -63,6 +63,16 @@ def compute_academy_refund(
     }
 
 
+def _missing_refund_facts(paid: int, total_days: int) -> list[str]:
+    """환불 계산에 필요한데 사용자가 주지 않은 항목."""
+    missing = []
+    if paid <= 0:
+        missing.append("total_paid_krw")
+    if total_days <= 0:
+        missing.append("total_days")
+    return missing
+
+
 def draft_academy_refund_request(
     profile: FamilyProfile,
     scenario_data: dict[str, Any],
@@ -76,7 +86,35 @@ def draft_academy_refund_request(
     paid = int(scenario_data.get("total_paid_krw", 0))
     days_used = int(scenario_data.get("days_used", 0))
     total_days = int(scenario_data.get("total_days", 0))
-    calc = compute_academy_refund(paid, days_used, total_days)
+
+    # 결제금액·교습일수를 사용자가 주지 않았으면 환불액을 계산하지 않는다.
+    # 예시값으로 채워 넣으면 그럴듯하지만 사실이 아닌 금액이 문서에 박힌다.
+    facts_supplied = paid > 0 and total_days > 0
+    calc: dict[str, Any] = (
+        compute_academy_refund(paid, days_used, total_days)
+        if facts_supplied
+        else {"status": "insufficient_facts", "missing": _missing_refund_facts(paid, total_days)}
+    )
+
+    if facts_supplied:
+        amount_section = f"""- 환불 산식: `{calc['formula']}`
+- 잔여 교습일수: {calc['remaining_days']}일
+- **환불 청구금액: {calc['refund_krw']:,}원**
+  (= {paid:,} × {calc['remaining_days']} / {total_days})"""
+        facts_section = f"""- 결제금액: **{paid:,}원** ({scenario_data.get('months_paid', '')}개월분)
+- 사용 일수: **{days_used}일** (총 {total_days}일 중)"""
+    else:
+        amount_section = """> ⚠️ **환불 금액을 계산하지 않았습니다.**
+> 결제금액과 교습 총일수가 입력되지 않아, 임의의 값을 넣는 대신 비워 두었습니다.
+> 아래 사실관계를 채우면 학원법 시행령 제18조 별표4 기준으로 자동 계산됩니다.
+>
+> - 결제금액(원): ______
+> - 교습 총일수: ______
+> - 사용 일수: ______
+>
+> 산식: `환불액 = 결제금액 × (총일수 − 사용일수) / 총일수`"""
+        facts_section = """- 결제금액: ______원 (미입력)
+- 사용 일수: ______일 (총 ______일 중) (미입력)"""
 
     today = date.today().isoformat()
     body = f"""# 학원 수강료 환불 요청서 (초안)
@@ -97,9 +135,8 @@ def draft_academy_refund_request(
 
 ## 1. 사실관계
 - 결제일: {scenario_data.get('payment_date', '')}
-- 결제금액: **{paid:,}원** ({scenario_data.get('months_paid', '')}개월분)
 - 교습 시작일: {scenario_data.get('use_start_date', '')}
-- 사용 일수: **{days_used}일** (총 {total_days}일 중)
+{facts_section}
 - 환불 요청일: {scenario_data.get('cancellation_request_date', today)}
 - 학원 답변: "{scenario_data.get('refusal_text', '환불 불가')}"
 
@@ -112,10 +149,7 @@ def draft_academy_refund_request(
 
 ## 3. 환불 금액 계산
 
-- 환불 산식: `{calc['formula']}`
-- 잔여 교습일수: {calc['remaining_days']}일
-- **환불 청구금액: {calc['refund_krw']:,}원**
-  (= {paid:,} × {calc['remaining_days']} / {total_days})
+{amount_section}
 
 ## 4. 회신 기한
 

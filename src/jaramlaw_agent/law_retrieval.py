@@ -72,18 +72,46 @@ def _bm25_lite_score(query_tokens: list[str], doc_tokens: list[str], corpus_size
     return score
 
 
+def derive_topic_tags(scenario_query: str) -> set[str]:
+    """질의에서 **법적 주제**만 뽑는다 (예: "학원비 환불" → {academy, refund}).
+
+    이 태그는 학습 저장소의 키로도 쓰이므로 성질이 중요하다. 가족이 아니라 주제에서
+    파생되므로 개인정보가 아니다 — "학원 환불을 물었다"는 사실은 그 부모를 식별하지 않는다.
+    (반대로 기존 memory_rag가 쓰던 life_stages/flags는 가족 구성이라 저장하면 안 된다.)
+    """
+    tags: set[str] = set()
+    if "환불" in scenario_query or "학원" in scenario_query:
+        tags.update(["academy", "refund"])
+    if "출산휴가" in scenario_query or "임신" in scenario_query or "둘째" in scenario_query:
+        tags.update(["maternity", "출산휴가", "pregnancy"])
+    if "육아휴직" in scenario_query:
+        tags.update(["parental-leave", "육아휴직"])
+    if "어린이집" in scenario_query and ("사고" in scenario_query or "다쳤" in scenario_query or "멍" in scenario_query):
+        tags.update(["daycare", "safety", "accident-report", "cctv"])
+    if "학교폭력" in scenario_query or "학폭" in scenario_query:
+        tags.add("school-violence")
+    if "양육비" in scenario_query:
+        tags.add("child-support")
+    return tags
+
+
 def retrieve_matched_laws(
     family_profile: FamilyProfile,
     scenario_query: str = "",
     persona_hint: Optional[str] = None,
     top_k: int = 10,
     seed_dir: Optional[Path] = None,
+    learned_boosts: Optional[dict[str, float]] = None,
 ) -> list[LawArticle]:
     """Hybrid retrieval: tag matching + BM25-lite + RRF.
 
     1. tag matching: family_flags ∩ applies_to_personas + life_stages ∩ applies_to_life_stages
     2. BM25-lite: scenario_query vs text_summary
     3. RRF (Reciprocal Rank Fusion) — k=60
+
+    `learned_boosts`: 과거 같은 주제의 상담에서 **실제로 인용에 성공한** 법령에 주는 가산점
+    (law_id → 가중치). 학습 결과가 프롬프트 텍스트가 아니라 점수로 들어온다 —
+    LLM이 "참고하라"는 말을 따라주길 기대하지 않고, 랭킹을 직접 바꾼다.
     """
     laws = load_all_laws(seed_dir)
     if not laws:
@@ -104,20 +132,7 @@ def retrieve_matched_laws(
 
     query_tokens = _tokenize_korean(scenario_query)
 
-    # 시나리오 키워드를 페르소나 hint에 통합 (예: "학원 환불" → 학원법 시드 매칭 강화)
-    extra_tags_from_query = set()
-    if "환불" in scenario_query or "학원" in scenario_query:
-        extra_tags_from_query.add("academy")
-    if "출산휴가" in scenario_query or "임신" in scenario_query or "둘째" in scenario_query:
-        extra_tags_from_query.update(["maternity", "출산휴가", "pregnancy"])
-    if "육아휴직" in scenario_query:
-        extra_tags_from_query.update(["parental-leave", "육아휴직"])
-    if "어린이집" in scenario_query and ("사고" in scenario_query or "다쳤" in scenario_query or "멍" in scenario_query):
-        extra_tags_from_query.update(["daycare", "safety", "accident-report", "cctv"])
-    if "학교폭력" in scenario_query or "학폭" in scenario_query:
-        extra_tags_from_query.add("school-violence")
-    if "양육비" in scenario_query:
-        extra_tags_from_query.add("child-support")
+    extra_tags_from_query = derive_topic_tags(scenario_query)
 
     # tag scoring
     tag_scored: list[tuple[LawArticle, float, list[str]]] = []
@@ -140,9 +155,14 @@ def retrieve_matched_laws(
                 reasons.append("applies to all stages")
 
         # tag 매칭 (시나리오 기반 추출)
+        #
+        # 가중치가 핵심이다. 이전에는 1.5였는데, 그러면 "모든 단계에 적용(+1.5)"되는
+        # 범용 법령이 persona(+2.0)까지 얹어 3.5점을 받아, 정작 질문의 핵심 법령
+        # (예: 학원비 환불 → 학원법 시행령)을 눌러버린다. 질문에서 직접 추출한
+        # 시나리오 태그는 가장 강한 관련성 신호이므로 다른 신호의 합보다 무겁게 준다.
         tag_overlap = set(law.tags) & extra_tags_from_query
         if tag_overlap:
-            score += 1.5 * len(tag_overlap)
+            score += 4.0 * len(tag_overlap)
             reasons.append(f"scenario tag match: {sorted(tag_overlap)}")
 
         # family flag → tag 매핑
@@ -152,6 +172,12 @@ def retrieve_matched_laws(
         if "second_child_pregnancy" in family_profile.flags and "pregnancy" in law.tags:
             score += 1.0
             reasons.append("second_child_pregnancy match")
+
+        # 학습 가산점 — 같은 주제의 과거 상담에서 이 법령이 실제로 인용에 성공했다.
+        boost = (learned_boosts or {}).get(law.law_id)
+        if boost:
+            score += boost
+            reasons.append(f"learned: 과거 동일 주제에서 인용 성공 (+{boost:.1f})")
 
         tag_scored.append((law, score, reasons))
 

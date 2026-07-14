@@ -48,7 +48,95 @@ const PYTHON_BIN = process.env.PYTHON_BIN || "python";
 // 법제처 실시간 조회(~2s) + 생성형 AI 답변(~6s)이 들어가면서 25s로는 현장 네트워크에서 빠듯하다.
 const PYTHON_TIMEOUT_MS = Number(process.env.JARAMLAW_PYTHON_TIMEOUT_MS || 45000);
 
+// 상담 이력·audit 로그에는 아동 생년월일 등 민감정보가 들어간다.
+// 기본은 loopback 전용이며, 외부에 노출하려면 토큰을 반드시 설정해야 한다 (fail-closed).
+const HOST = process.env.JARAMLAW_HOST || "127.0.0.1";
+const API_TOKEN = process.env.JARAMLAW_API_TOKEN || "";
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+const IS_LOOPBACK = LOOPBACK_HOSTS.has(HOST);
+
+if (!IS_LOOPBACK && !API_TOKEN) {
+  console.error(
+    `[jaramlaw] 거부: JARAMLAW_HOST=${HOST} 로 외부 노출하려면 JARAMLAW_API_TOKEN 이 필요합니다.\n` +
+      `           상담 이력과 audit 로그에 아동 개인정보가 포함되어 있어 무인증 노출을 차단합니다.`,
+  );
+  process.exit(1);
+}
+
 app.use(express.json({ limit: "15mb" }));
+
+// 상담 1건은 파이썬 프로세스 하나를 띄우고 법제처와 OpenAI를 부른다 — 최대 45초, 실제 돈.
+// /api/consult 는 인증이 없는 공개 라우트라, 지금까지는 누구든 루프를 돌려 프로세스와
+// 토큰 예산을 동시에 태울 수 있었다. 창구를 좁힌다.
+const RATE_LIMIT_MAX = Number(process.env.JARAMLAW_RATE_LIMIT_MAX || 20);
+const RATE_LIMIT_WINDOW_MS = Number(process.env.JARAMLAW_RATE_LIMIT_WINDOW_MS || 60_000);
+const RATE_LIMIT_MAX_KEYS = 5000;
+const rateBuckets = new Map<string, number[]>();
+
+/** 비용이 드는 라우트(파이썬 spawn + LLM 호출) 전용 슬라이딩 윈도우 레이트리밋.
+ *
+ * 프로세스 안에만 사는 카운터다 — 인스턴스를 여러 개 띄우면 창구가 그만큼 늘어난다.
+ * 기본 배포가 단일 프로세스 loopback이라 지금은 충분하고, 분산 배포로 가면
+ * 공유 저장소(Redis 등) 기반으로 옮겨야 한다.
+ */
+function rateLimit(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  const now = Date.now();
+
+  // 서로 다른 IP가 계속 들어오면 Map이 무한정 자란다. 먼저 만료된 키를 쓸어내고,
+  // 그래도 상한을 넘으면(전부 fresh인 병리적 경우) 삽입 순서상 가장 오래된 키부터
+  // 강제로 잘라낸다 — 만료 여부와 무관하게 절대 상한을 강제한다(Codex F9).
+  if (rateBuckets.size > RATE_LIMIT_MAX_KEYS) {
+    for (const [key, stamps] of rateBuckets) {
+      if (stamps.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) rateBuckets.delete(key);
+    }
+    while (rateBuckets.size > RATE_LIMIT_MAX_KEYS) {
+      const oldest = rateBuckets.keys().next().value;
+      if (oldest === undefined) break;
+      rateBuckets.delete(oldest);
+    }
+  }
+
+  const key = req.ip || "unknown";
+  const hits = (rateBuckets.get(key) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+
+  if (hits.length >= RATE_LIMIT_MAX) {
+    rateBuckets.set(key, hits);
+    res.status(429).json({
+      status: "error",
+      message: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+    });
+    return;
+  }
+
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  next();
+}
+
+/** 민감정보(상담 이력·audit 로그·전문가 검토)를 다루는 라우트 전용 인증 게이트. */
+function requireOperatorAuth(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  if (!API_TOKEN) {
+    // 토큰 미설정 + loopback 바인딩 → 로컬 개발로 간주하고 통과 (외부 바인딩은 부팅 시 이미 차단됨).
+    next();
+    return;
+  }
+  const header = String(req.headers.authorization || "");
+  const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const supplied = bearer || String(req.headers["x-jaramlaw-token"] || "");
+  if (supplied !== API_TOKEN) {
+    res.status(401).json({ status: "error", message: "인증이 필요합니다." });
+    return;
+  }
+  next();
+}
 
 const PYTHON_WORKFLOW_SCRIPT = String.raw`
 import json
@@ -295,17 +383,20 @@ app.get("/api/ops/workflow/status", (_req, res) => {
   });
 });
 
-app.get("/api/ops/audit/logs", (req, res) => {
+app.get("/api/ops/audit/logs", requireOperatorAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit || 40), 120);
   res.json({ status: "success", data: readRecentAuditRecords(limit) });
 });
 
-app.get("/api/ops/traces", (req, res) => {
+app.get("/api/ops/traces", requireOperatorAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit || 80), 240);
   res.json({ status: "success", data: readTraceRecords(limit) });
 });
 
-app.post("/api/ops/workflow/publish", (req, res) => {
+// 이 라우트만 인증 게이트가 빠져 있었다 — 형제 ops 라우트(audit/traces/batch-consult)는
+// 전부 requireOperatorAuth를 달고 있다. 무인증 상태로 runs/ 아래에 파일을 쓰고
+// 보안 로그에 임의의 note를 남길 수 있었다.
+app.post("/api/ops/workflow/publish", requireOperatorAuth, (req, res) => {
   const { note = "local workflow publish" } = req.body as { note?: string };
   const manifest = {
     status: "published-local",
@@ -325,7 +416,7 @@ app.post("/api/ops/workflow/publish", (req, res) => {
   res.json({ status: "success", data: manifest });
 });
 
-app.post("/api/ops/batch-consult", async (req, res) => {
+app.post("/api/ops/batch-consult", requireOperatorAuth, rateLimit, async (req, res) => {
   const { items, clientType = "layperson" } = req.body as { items?: unknown[]; clientType?: ClientType };
   const inputs = Array.isArray(items)
     ? items.map((item) => {
@@ -363,11 +454,11 @@ app.post("/api/ops/batch-consult", async (req, res) => {
   res.json({ status: "success", data: results });
 });
 
-app.get("/api/history", (_req, res) => {
+app.get("/api/history", requireOperatorAuth, (_req, res) => {
   res.json({ status: "success", count: sessions.length, data: sessions });
 });
 
-app.get("/api/history/:id", (req, res) => {
+app.get("/api/history/:id", requireOperatorAuth, (req, res) => {
   const session = sessions.find((item) => item.id === req.params.id);
   if (!session) {
     return res.status(404).json({ status: "error", message: "상담 세션을 찾을 수 없습니다." });
@@ -375,7 +466,7 @@ app.get("/api/history/:id", (req, res) => {
   return res.json({ status: "success", data: session });
 });
 
-app.post("/api/history/:id/expert-review", (req, res) => {
+app.post("/api/history/:id/expert-review", requireOperatorAuth, (req, res) => {
   const sessionIndex = sessions.findIndex((item) => item.id === req.params.id);
   if (sessionIndex === -1) {
     return res.status(404).json({ status: "error", message: "상담 세션을 찾을 수 없습니다." });
@@ -409,12 +500,14 @@ app.post("/api/history/:id/expert-review", (req, res) => {
   return res.json({ status: "success", data: sessions[sessionIndex] });
 });
 
-app.post("/api/consult", async (req, res) => {
-  const { message, clientType = "layperson", language = "ko" } = req.body as {
+app.post("/api/consult", rateLimit, async (req, res) => {
+  // profile: 아이 생년월일·부모·사건 사실관계. 주어진 값만 쓰고, 없으면 지어내지 않는다.
+  const { message, clientType = "layperson", language = "ko", profile } = req.body as {
     message?: string;
     history?: Message[];
     clientType?: ClientType;
     language?: UiLanguage;
+    profile?: JsonRecord;
   };
   const query = typeof message === "string" ? message.trim() : "";
 
@@ -429,7 +522,7 @@ app.post("/api/consult", async (req, res) => {
     timestamp: new Date().toISOString(),
   };
 
-  const rawInput = buildWorkflowInput(query, clientType);
+  const rawInput = buildWorkflowInput(query, clientType, profile);
 
   if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE !== "1" && fs.existsSync(PYTHON_SRC)) {
     try {
@@ -512,7 +605,10 @@ app.post("/api/encrypt-demo", (req, res) => {
   return res.json({ status: "success", decrypted });
 });
 
-app.post("/api/sync-cloud", (_req, res) => {
+// 인증 없이 전체 상담 세션(아동 프로필·상담 내용)을 그대로 반환하고 있었다 —
+// /api/history 에 걸어둔 인증 게이트를 이 경로로 우회할 수 있었다(무효화). 형제 라우트와
+// 동일하게 requireOperatorAuth 를 적용한다.
+app.post("/api/sync-cloud", requireOperatorAuth, (_req, res) => {
   sessions.forEach((session) => {
     session.synced = true;
   });
@@ -520,7 +616,8 @@ app.post("/api/sync-cloud", (_req, res) => {
   res.json({ status: "success", synced: sessions.length, data: sessions });
 });
 
-app.get("/api/security-logs", (_req, res) => {
+// 보안 로그에도 상담 대상·크기 등 운영 정보가 담긴다 — 무인증 노출 금지.
+app.get("/api/security-logs", requireOperatorAuth, (_req, res) => {
   res.json({ status: "success", logs: securityLogs });
 });
 
@@ -574,49 +671,56 @@ async function runPythonWorkflow(rawInput: JsonRecord, scenarioId: string | null
   });
 }
 
-function buildWorkflowInput(message: string, clientType: ClientType | undefined): JsonRecord {
+/**
+ * 사용자가 실제로 제공한 값만 워크플로우에 넘긴다.
+ *
+ * 이전 구현은 아이 생년월일·학원비·납입월수 등을 하드코딩된 예시값으로 채워 보냈다.
+ * 그 결과 환불 금액·지원 자격·D-day가 실제 가정이 아니라 가상의 가정을 기준으로 계산됐다.
+ * 지금은 값이 없으면 채우지 않는다 — 계산은 생략되고, 무엇이 빠졌는지 호출자가 알 수 있다.
+ */
+function buildWorkflowInput(
+  message: string,
+  clientType: ClientType | undefined,
+  profile?: JsonRecord,
+): JsonRecord {
   const scenarioType = inferScenarioType(message);
-  const baseChildren =
-    scenarioType === "academy_refund" || scenarioType === "school_violence"
-      ? [{ name_masked: "C1", birth_date: "2019-08-10", sex: "unknown", facility: "elementary_school" }]
-      : [{ name_masked: "C1", birth_date: "2024-05-15", sex: "unknown", facility: "childcare_center" }];
+  const supplied = asRecord(profile);
 
-  const data: JsonRecord = {};
+  const children = asArray(supplied.children).map((child) => asRecord(child));
+  const parents = asArray(supplied.parents).map((parent) => asRecord(parent));
+  const events = asArray(supplied.events).map((event) => asRecord(event));
+  const flags = asArray(supplied.flags).map(String);
+  const caseData = asRecord(supplied.case_data);
+
+  // 시나리오별 사실관계: 사용자가 준 값만 통과시킨다 (없으면 키 자체를 만들지 않는다).
+  const data: JsonRecord = { ...caseData };
   if (scenarioType === "academy_refund") {
-    Object.assign(data, {
-      academy_name: "Jaram Academy",
-      monthly_fee_krw: 350000,
-      months_paid: 3,
-      total_paid_krw: 1050000,
-      payment_date: "2026-04-20",
-      use_start_date: "2026-04-21",
-      cancellation_request_date: new Date().toISOString().slice(0, 10),
-      days_used: 35,
-      total_days: 90,
-      refusal_notice_received: /거부|불가|안.?됨/.test(message),
-      refusal_text: message.slice(0, 160),
-    });
+    data.refusal_notice_received = /거부|불가|안.?됨/.test(message);
+    data.refusal_text = message.slice(0, 160);
   }
   if (scenarioType === "daycare_accident") {
-    Object.assign(data, {
-      notification_text: message.slice(0, 180),
-      parent_observation: message,
-      cctv_access_denied: /CCTV|열람|거부|안.?보여/.test(message),
-      accident_report_received: false,
-      keywords_detected: Array.from(message.matchAll(/멍|상처|학대|방임|CCTV|사고/g)).map((match) => match[0]),
-    });
+    data.notification_text = message.slice(0, 180);
+    data.parent_observation = message;
+    data.cctv_access_denied = /CCTV|열람|거부|안.?보여/.test(message);
+    data.keywords_detected = Array.from(message.matchAll(/멍|상처|학대|방임|CCTV|사고/g)).map((m) => m[0]);
+  }
+
+  const missing: string[] = [];
+  if (!children.length) missing.push("children");
+  if (!parents.length) missing.push("parents");
+  if (scenarioType === "academy_refund" && !Number(caseData.monthly_fee_krw)) {
+    missing.push("academy_refund.payment_facts");
   }
 
   return {
     persona: clientType === "lawyer" ? "P3" : "P1",
-    reference_date: new Date().toISOString().slice(0, 10),
-    parents: [
-      { role: "mother", age: 34, employment: "unknown", region_code: "11440" },
-      { role: "father", age: 36, employment: "unknown", region_code: "11440" },
-    ],
-    children: baseChildren,
-    events: scenarioType === "parental_leave" ? [{ type: "pregnancy", date: new Date().toISOString().slice(0, 10) }] : [],
-    flags: scenarioType === "parental_leave" ? ["working_mom", "dual_income"] : [],
+    reference_date: asString(supplied.reference_date) || new Date().toISOString().slice(0, 10),
+    parents,
+    children,
+    events,
+    flags,
+    // 어떤 사실관계가 비어 있는지 리포트에 남긴다 — 빈 값을 지어내지 않았음을 증명한다.
+    profile_completeness: { supplied: !missing.length, missing },
     scenario: {
       type: scenarioType,
       query: message,
@@ -755,10 +859,13 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
   const sourceBadge = renderLawSourceBadge(report, language);
 
   // 생성형 AI가 쓴 안내문이 있으면 그것이 부모가 읽을 본문이다.
-  // AI에 넘기는 근거는 인용 4요소를 갖춘 조문뿐이라(orchestrator Node 9-bis),
-  // 보류된 인용은 여기까지 오지 못한다.
+  //
+  // 주의: verifierRatio는 결정론 파이프라인이 만든 claim(법령·지원·권리카드·문서초안)의 검증 비율이며,
+  // 아래 AI 본문 자체는 검증 대상이 아니다. 두 수치를 나란히 놓으면 AI 답변이 검증된 것처럼 읽히므로,
+  // AI 본문 아래에는 "AI 답변은 검증되지 않았다"는 사실을 명시하고 검증률은 붙이지 않는다.
   if (asString(ai.mode) === "llm" && aiText) {
     const withheld = Number(ai.withheld_laws ?? 0);
+    const pending = Number(ai.not_yet_effective_laws ?? 0);
     return [
       sourceBadge,
       "",
@@ -766,8 +873,11 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
       "",
       "---",
       language === "en"
-        ? `Grounded on ${Number(ai.citable_laws ?? 0)} fully-cited article(s)${withheld ? `; ${withheld} withheld for incomplete citation` : ""} · supports ${supports.length} · rights cards ${rights.length} · drafts ${docs.length} · verified ${Math.round(verifierRatio * 100)}%`
-        : `인용 4요소를 갖춘 조문 ${Number(ai.citable_laws ?? 0)}건에만 근거${withheld ? ` · 인용 불완전 ${withheld}건은 보류` : ""} · 지원 ${supports.length}건 · 권리카드 ${rights.length}장 · 문서초안 ${docs.length}건 · 검증률 ${Math.round(verifierRatio * 100)}%`,
+        ? `⚠️ This AI answer is **not machine-verified**. It was written from ${Number(ai.citable_laws ?? 0)} in-force, fully-cited article(s)${withheld ? `; ${withheld} withheld for incomplete citation` : ""}${pending ? `; ${pending} excluded as not yet in force` : ""}. Check every cited article against the linked source before acting.`
+        : `⚠️ 위 AI 답변은 **자동 검증되지 않았습니다**. 시행 중이고 인용 4요소를 갖춘 조문 ${Number(ai.citable_laws ?? 0)}건만 근거로 제공했을 뿐, 답변 문장 자체는 검증 대상이 아닙니다${withheld ? ` · 인용 불완전 ${withheld}건 보류` : ""}${pending ? ` · 시행 전 ${pending}건 제외` : ""}. 인용된 조문은 반드시 출처 링크로 직접 확인하세요.`,
+      language === "en"
+        ? `Deterministic outputs (separately verified ${Math.round(verifierRatio * 100)}%): supports ${supports.length} · rights cards ${rights.length} · drafts ${docs.length}`
+        : `아래 결정론 산출물은 별도 검증됨(${Math.round(verifierRatio * 100)}%): 지원 ${supports.length}건 · 권리카드 ${rights.length}장 · 문서초안 ${docs.length}건`,
     ].join("\n");
   }
 
@@ -965,9 +1075,12 @@ async function initializeServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, HOST, () => {
     const fingerprint = createHash("sha1").update(PYTHON_SRC).digest("hex").slice(0, 8);
-    console.log(`JaramLaw Agent UI running at http://localhost:${PORT} (bridge ${fingerprint})`);
+    console.log(`JaramLaw Agent UI running at http://${HOST}:${PORT} (bridge ${fingerprint})`);
+    if (IS_LOOPBACK && !API_TOKEN) {
+      console.log("[jaramlaw] loopback 전용 · 인증 없음 (로컬 개발). 외부 노출 시 JARAMLAW_API_TOKEN 필수.");
+    }
   });
 }
 

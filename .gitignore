@@ -14,6 +14,10 @@ audit_logs/*.jsonl
 runs/*.json
 runs/*.png
 !runs/.gitkeep
+
+# AgentLoop gate output — per-run artifacts. The *policy* (ops/agentloop/) is the
+# committed source of truth; these are what the gate produced from it on one machine.
+reports/agentloop/
 .env
 .env.local
 .env.*

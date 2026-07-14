@@ -49,6 +49,26 @@ def load_dotenv(env_file: Optional[Path] = None, override: bool = False) -> dict
     return parsed
 
 
+DEFAULT_LAW_API_BASE_URL = "https://www.law.go.kr"
+
+
+def enforce_https(url: str, *, default: str = DEFAULT_LAW_API_BASE_URL) -> str:
+    """법제처 base URL을 https로 강제한다.
+
+    법제처 호출은 OC 키를 **쿼리스트링**에 실어 보낸다(law_api_client.search_laws).
+    base URL이 http이면 그 키가 평문으로 네트워크를 지나간다 — 중간자·프록시 로그에
+    그대로 남는다. 기본값이 http였고 .env.example도 http를 안내하고 있었다.
+
+    운영자가 http를 넣어도 조용히 승격한다. 키를 지키는 쪽이 설정을 존중하는 쪽보다 낫다.
+    """
+    url = (url or "").strip() or default
+    if url.startswith("http://"):
+        return "https://" + url[len("http://"):]
+    if not url.startswith("https://"):
+        return default
+    return url
+
+
 def redact_secret(s: Optional[str], keep_head: int = 6, keep_tail: int = 4) -> str:
     """API key 마스킹 — 보안 로깅용."""
     if not s:
@@ -66,7 +86,7 @@ class Config:
     openai_model: str = "gpt-4o-mini"
     openrouter_api_key: Optional[str] = None
     law_api_key: Optional[str] = None
-    law_api_base_url: str = "http://www.law.go.kr"
+    law_api_base_url: str = DEFAULT_LAW_API_BASE_URL
     legalize_kr_path: Path = field(default_factory=lambda: PROJECT_ROOT / "external" / "legalize-kr")
 
     @classmethod
@@ -83,7 +103,7 @@ class Config:
             openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
             openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
             law_api_key=os.environ.get("LAW_API_KEY") or None,
-            law_api_base_url=os.environ.get("LAW_API_BASE_URL", "http://www.law.go.kr"),
+            law_api_base_url=enforce_https(os.environ.get("LAW_API_BASE_URL", DEFAULT_LAW_API_BASE_URL)),
             legalize_kr_path=legalize_path,
         )
 

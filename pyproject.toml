@@ -13,6 +13,13 @@ dependencies = [
   "pyyaml>=6.0",
 ]
 
+# AgentShield 런타임 가드는 정식 의존성이다. PyPI 미배포라 여기 버전 핀을 걸 수 없어
+# 로컬 경로로 설치한다(형제 저장소). 미설치 시 입력/출력 가드가 조용히 degrade하므로,
+# 프로덕션 배포는 아래 중 하나로 반드시 설치를 보장할 것:
+#   pip install -e ../AgentShield        # 형제 저장소 editable
+#   또는 AGENTSHIELD_PATH 환경변수로 경로 지정 (agentshield_bridge._candidate_src_paths)
+# 부재 여부는 `jaramlaw diagnose`의 agentshield.available 로 확인한다.
+
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 

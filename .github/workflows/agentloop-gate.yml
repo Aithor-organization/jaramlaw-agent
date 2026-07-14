@@ -1,0 +1,91 @@
+name: AgentLoop Maintenance Gate
+
+# Pre-deploy lifecycle gate. Compiles jaramlaw-agent's measured runtime signals
+# (audit_logs/) against ops/agentloop/jaramlaw.policy.json using the sibling AgentLoop
+# maintenance compiler, and reports drift / regression / trace-completeness / staleness
+# plus a runtime action (promote | pause_canary | block).
+#
+# MODE: report-only.
+#   The gate does not fail the build yet, on purpose. Its regression baselines were
+#   frozen from 4 local runs — too thin to block on, and blocking on a noisy baseline is
+#   how a gate gets disabled by the first person it inconveniences. The exit criteria for
+#   flipping to `--fail-on-block` are written down in docs/operational-readiness.md;
+#   they are not vibes, and this comment should be deleted when they are met.
+#
+# The gate is skipped (not failed) when AgentLoop is not checked out — it is a private
+# sibling repo, and a fork without the read token should still get a working CI.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agentloop-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout jaramlaw-agent
+        uses: actions/checkout@v4
+        with:
+          path: jaramlaw-agent
+
+      - name: Checkout AgentLoop (maintenance compiler)
+        id: checkout_loop
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: Aithor-organization/AgentLoop
+          path: AgentLoop
+          token: ${{ secrets.AGENTLOOP_READ_TOKEN || github.token }}
+
+      - name: Check AgentLoop availability
+        id: loop
+        run: |
+          if [ -f "${{ github.workspace }}/AgentLoop/src/cli.js" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::AgentLoop not accessible — maintenance gate skipped. Set the AGENTLOOP_READ_TOKEN secret to enable it. The gate's own contract tests still run below."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.loop.outputs.available == 'true'
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        working-directory: jaramlaw-agent
+        run: pip install -e '.[dev]'
+
+      - name: Gate contract tests (blocking — runs with or without AgentLoop)
+        # These pin the property that makes the gate trustworthy: a component-id typo
+        # must fail loudly instead of skipping every pass and reporting a false pass.
+        working-directory: jaramlaw-agent
+        run: python -m pytest tests/test_agentloop_gate.py -q
+
+      - name: AgentLoop maintenance gate (report-only)
+        if: steps.loop.outputs.available == 'true'
+        working-directory: jaramlaw-agent
+        env:
+          AGENTLOOP_ROOT: ${{ github.workspace }}/AgentLoop
+        run: python scripts/run_agentloop_gate.py
+
+      - name: Publish gate report to the job summary
+        if: ${{ always() && steps.loop.outputs.available == 'true' }}
+        working-directory: jaramlaw-agent
+        run: cat reports/agentloop/report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Archive gate artifacts
+        if: ${{ always() && steps.loop.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentloop-gate-report
+          path: jaramlaw-agent/reports/agentloop/
