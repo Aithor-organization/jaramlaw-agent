@@ -9,7 +9,7 @@ graph TD
     B --> C[3. family_context<br/>라이프스테이지 분류]
     C --> D[4. law_retrieval<br/>BM25 + Tag + RRF]
     C --> E[5. support_matching<br/>자격 매칭 + D-day]
-    D --> F[6. parallel_expert_board<br/>5 에이전트 독립 검토]
+    D --> F[6. parallel_expert_board<br/>5 관점 결정론적 통합]
     E --> F
     F --> G[7. document_drafter<br/>신청서·신고서·환불 요청서]
     G --> H[8. verify_atomic_claims<br/>Citation 강제]
@@ -32,7 +32,7 @@ graph TD
 | 3 | family_context | `family_context.py` | 생년월일 → 라이프스테이지, 특수상황 태그 |
 | 4 | law_retrieval | `law_retrieval.py` | 시드 yaml 로드 + hybrid retrieval |
 | 5 | support_matching | `support_matching.py` | 가족 프로필 → 자격 매칭 + D-day |
-| 6 | parallel_expert_board | `orchestrator._board_opinions` | 5 에이전트 독립 검토 |
+| 6 | parallel_expert_board | `orchestrator._board_opinions` | 5 관점 결정론적 통합 (동시 LLM 아님) |
 | 7 | document_drafter | `document_drafter.py` | 신청서·신고서·환불 요청서 초안 + 환불액 계산 |
 | 8 | verify_atomic_claims | `verifier.py` | Citation 강제 (Constitution 원칙 2) |
 | 9 | human_review_gate | `human_review.py` | 고위험·저신뢰 → 전문가 라우팅 |
@@ -57,7 +57,7 @@ family_context.build_family_profile → FamilyProfile
 +---------+ +--------------+
   ↓ matched_laws ↓ support_matches
   ↓
-parallel_expert_board → board_opinions: {5 에이전트}
+parallel_expert_board → board_opinions: {5 관점 결정론적 통합}
   ↓
 document_drafter → draft_documents
   ↓
@@ -75,7 +75,7 @@ audit_log → FinalReport JSON + audit_log_id
 
 ## Multi-Agent Board (5 에이전트)
 
-`parallel_expert_board` 노드 = 5 에이전트의 독립 검토를 통합 (병렬 의도, deterministic 정리).
+`parallel_expert_board` 노드 = 5개 관점(법령·가족·지원·문서·반증)을 **결정론적으로** 통합한다. 이름의 'parallel'은 설계 의도의 잔재이며, 실제 구현은 동시 LLM 에이전트 호출이 아니라 이미 계산된 결과를 조립하는 in-process 합성이다 (외부 호출 0, ~수십 µs — 병목 아님).
 
 | 에이전트 | 역할 | Builder/Verifier |
 |---|---|:---:|

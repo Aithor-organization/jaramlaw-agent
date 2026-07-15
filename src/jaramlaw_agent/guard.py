@@ -176,6 +176,30 @@ def collect_strings(v: Any) -> list[str]:
     return []
 
 
+# 배우자·동거인에 의한 성인 피해 가정폭력을 공기(共起)로 잡는다.
+# SAFETY_KEYWORDS의 "남편이 때"는 부분문자열이라 한국어 SOV 어순에서 목적어가
+# 끼면("남편이 저를 때려요") 끊겨 미탐지된다. 주체 토큰과 폭력 동사가 함께 나오면
+# 어미·목적어·부사가 어떻게 끼어도 신호를 잡되, 대상이 아동인 문장은 child_abuse
+# 경로에 양보한다(잘못 1366으로 새지 않도록).
+_DV_ACTORS = ("남편", "아내", "배우자", "동거인", "파트너", "시아버지", "시어머니", "시댁")
+_DV_VIOLENCE = (
+    "때려", "때린", "때렸", "때리", "맞았", "맞고", "맞아", "맞는",
+    "폭행", "구타", "협박", "밀쳐", "밀쳤", "흉기", "목을 조",
+)
+_DV_CHILD_OBJECT = ("아이를", "아기를", "자녀를", "애를", "아이한테", "아이가", "아기가")
+
+
+def _detect_spousal_violence(blob: str) -> Optional[str]:
+    """배우자 폭력 정황(성인 피해)을 주체+폭력동사 공기로 판정. 아동 대상이면 None."""
+    if any(obj in blob for obj in _DV_CHILD_OBJECT):
+        return None
+    actor = next((a for a in _DV_ACTORS if a in blob), None)
+    verb = next((v for v in _DV_VIOLENCE if v in blob), None)
+    if actor and verb:
+        return f"배우자 폭력 정황: '{actor}' + '{verb}'"
+    return None
+
+
 def detect_safety_signals(payload: Any) -> SafetyRouting:
     """payload(dict/list/str) 안의 모든 문자열을 검사하여 첫 매칭 신호 반환."""
     blob = " ".join(collect_strings(payload))
@@ -190,6 +214,16 @@ def detect_safety_signals(payload: Any) -> SafetyRouting:
                     contact=f"{contact} ({name})",
                     reason=f"키워드 매칭: '{kw}'",
                 )
+
+    dv_reason = _detect_spousal_violence(blob)
+    if dv_reason is not None:
+        contact, name = EMERGENCY_CONTACTS["domestic_violence"]
+        return SafetyRouting(
+            triggered=True,
+            category="domestic_violence",
+            contact=f"{contact} ({name})",
+            reason=dv_reason,
+        )
     return SafetyRouting(triggered=False)
 
 

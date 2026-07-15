@@ -46,7 +46,7 @@ rights_card + calendar → audit_log
 | **family_context** | 생년월일 → 라이프스테이지(임신/영아/유아/초등…) + 특수상황 태그 | `family_context.py` |
 | **law_retrieval** | 하이브리드 검색(BM25 + 태그 + RRF)으로 적용 법령 선별 | `law_retrieval.py` + `law_live.py`(법제처 실시간 보강) |
 | **support_matching** | 받을 자격 있는 정부지원 매칭 + 신청기한 D-day | `support_matching.py` |
-| **parallel_expert_board** | 5개 에이전트가 독립 관점으로 교차 검토 | `orchestrator._board_opinions()` |
+| **parallel_expert_board** | 5개 관점(법령·가족·지원·문서·반증)을 **결정론적으로** 통합 검토 — 동시 LLM 에이전트가 아니라 in-process 합성(외부 호출 0) | `orchestrator._board_opinions()` |
 | **document_drafter** | 신청서·신고서 초안 생성 (환불액 일할 계산 포함) | `document_drafter.py` |
 | **verify_atomic_claims** | 모든 법령 주장을 (법령명·조문·시행일·출처) 4요소로 검증 | `verifier.py` |
 | **ai_answer** | 인용 가능한 법령만 컨텍스트로 자연어 안내 생성 | `openai_client.py` |
@@ -276,7 +276,7 @@ jaramlaw-agent/
 │   └── cli.py                   # 진입점 (doctor/demo/search-law/fetch-article/ask)
 ├── ops/agentloop/               # 운영 게이트 정책 (SLO/임계값/baseline)
 ├── scripts/                     # AgentLoop 관측 + 게이트 러너
-├── tests/                       # 150 tests
+├── tests/                       # 157 tests
 ├── .github/workflows/           # CI (agentloop-gate)
 └── docs/                        # 아키텍처 + 운영 준비도 + SKILLs 통합
 ```
@@ -317,7 +317,7 @@ PYTHONPATH=src python3 -m jaramlaw_agent demo --scenario C
 
 ```bash
 PYTHONPATH=src python3 -m pytest tests/ -q
-# 150 tests
+# 157 tests
 ```
 
 주요 회귀 차단:

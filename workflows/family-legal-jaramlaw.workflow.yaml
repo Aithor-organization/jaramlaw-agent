@@ -119,7 +119,7 @@ nodes:
   - id: parallel_expert_board
     owner: orchestrator-agent
     kind: parallel_agents
-    description: 5개 전문 Agent 독립 관점 검토 — Law Retrieval / Family Context / Support Matching / Document Drafter / Contrarian Verifier
+    description: 5개 관점(Law Retrieval / Family Context / Support Matching / Document Drafter / Contrarian Verifier)을 결정론적으로 통합 — 동시 LLM 호출이 아닌 in-process 합성
     agents:
       - law-retrieval-agent
       - family-context-agent

@@ -273,6 +273,37 @@ def test_llm_output_unsupported_claim_is_flagged(monkeypatch, base_input):
     assert "단정" in report.ai_answer["text"] or "확정된 보장이 아닙니다" in report.ai_answer["text"]
 
 
+@pytest.mark.parametrize(
+    "answer, expected_phrase",
+    [
+        ("이 방법은 100% 안전하고 절대 실패하지 않습니다.", "100% 안전"),
+        ("반드시 승소합니다. 무조건 환불받을 수 있습니다.", "반드시 승소"),
+        ("무조건 합격 가능합니다.", "무조건 합격"),
+    ],
+)
+def test_korean_absolute_claim_is_flagged(answer, expected_phrase):
+    """AgentShield의 영어 위주 절대단정 탐지가 놓치던 한글 확언을 결정론 계층이 잡는다."""
+    if not bridge.status().get("available"):
+        pytest.skip("AgentShield 미가용 — 출력가드 비활성")
+    verdict = bridge.inspect_output_text(answer)
+    assert any(expected_phrase in claim for claim in verdict.unsupported_claims)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "사용자는 반드시 90일의 출산휴가를 주어야 한다.",  # 법적 의무 — 결과 확언 아님
+        "무조건 관할 주민센터에 신고하셔야 합니다.",  # 절차 안내 — 결과 단정 아님
+    ],
+)
+def test_korean_legal_obligation_is_not_flagged(answer):
+    """'반드시 ~주어야'(의무)·'무조건 신고'(절차)를 절대단정으로 오탐하지 않는다."""
+    if not bridge.status().get("available"):
+        pytest.skip("AgentShield 미가용 — 출력가드 비활성")
+    verdict = bridge.inspect_output_text(answer)
+    assert verdict.unsupported_claims == []
+
+
 def test_llm_output_dates_are_preserved(monkeypatch, base_input):
     """시행일이 마스킹되면 인용이 무의미해진다."""
     report = _run_with_llm(

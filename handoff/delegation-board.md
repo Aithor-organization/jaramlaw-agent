@@ -16,7 +16,7 @@
   ├──→ [law-retrieval-agent] ──→ matched_laws
   └──→ [support-matching-agent] ──→ support_matches
   ↓
-[parallel_expert_board: 5 에이전트 병렬 검토]
+[parallel_expert_board: 5 관점 결정론적 통합 (동시 LLM 아님)]
   ├ law-retrieval-agent
   ├ family-context-agent
   ├ support-matching-agent

@@ -50,6 +50,20 @@ def test_safety_signal_no_trigger():
     assert not routing.triggered
 
 
+def test_safety_signal_spousal_violence_with_object():
+    # "남편이 때" 부분문자열이 목적어("저를")에 끊겨 놓치던 성인 피해 가정폭력.
+    routing = detect_safety_signals({"observation": "남편이 저를 때려요 무서워요"})
+    assert routing.triggered
+    assert routing.category == "domestic_violence"
+    assert "1366" in routing.contact
+
+
+def test_safety_signal_child_object_yields_from_dv():
+    # 아동이 대상인 문장은 배우자 폭력(1366)으로 새지 않는다 (child_abuse/LLM에 양보).
+    routing = detect_safety_signals({"observation": "남편이 아이를 때려요"})
+    assert routing.category != "domestic_violence"
+
+
 def test_run_guard_integration_scenario_c():
     raw = {
         "scenario": {

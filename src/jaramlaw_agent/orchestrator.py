@@ -1,6 +1,6 @@
 """orchestrator — 14노드 workflow runner.
 
-Multi-Agent Board 패턴: 5 에이전트 독립 검토 (board_opinions).
+Multi-Agent Board 패턴: 5개 관점을 결정론적으로 통합 (board_opinions — 동시 LLM 아님).
 Constitution 5원칙 강제 + audit log 생성.
 """
 
@@ -62,7 +62,7 @@ def _board_opinions(
     supports: list[SupportMatch],
     draft_docs: list[DraftDocument],
 ) -> dict[str, Any]:
-    """5 에이전트 독립 검토 (deterministic 정리)."""
+    """5개 관점 독립 검토를 결정론적으로 통합 (동시 LLM 호출 없는 in-process 합성)."""
     # contrarian-verifier — citation_gap / overreach / missing_exception 휴리스틱
     findings = []
     for law in matched_laws:
@@ -143,7 +143,7 @@ def run_workflow(
       4. family_context
       5. law_retrieval
       6. support_matching
-      7. parallel_expert_board (5 에이전트)
+      7. parallel_expert_board (5 관점 결정론적 통합, 동시 LLM 아님)
       8. document_drafter
       9. verify_atomic_claims
       10. human_review_gate
@@ -459,6 +459,14 @@ def run_workflow(
                 model=answer_model,
                 # 과거 이 주제에서 답변이 상한에 걸려 잘린 적이 있으면 미리 늘려서 시작한다.
                 max_tokens=learning_plan.max_answer_tokens,
+            )
+            # LLM 생성은 이 워크플로우의 최대 지연 구간(외부 호출)이다. 생성 직후 트레이스를
+            # 찍어, 이 시간이 다음 노드(agentshield_output)에 잘못 귀속되지 않게 한다.
+            tracer.trace(
+                "llm_answer_generated",
+                model=answer.model,
+                finish_reason=answer.finish_reason,
+                error=bool(answer.error),
             )
             if answer.error:
                 ai_answer["error"] = answer.error
