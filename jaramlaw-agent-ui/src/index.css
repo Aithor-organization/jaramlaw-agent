@@ -347,6 +347,236 @@ h3 {
   gap: 0.4rem;
 }
 
+/* 발표자료 4p '자람법 소개' — ①입력 → ②엔진 → ③산출물 3단계 흐름. */
+.how-panel {
+  margin-top: 0.75rem;
+}
+.how-panel .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.5rem;
+}
+.stage-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.stage-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.stage-head h3 {
+  font-size: 0.98rem;
+  margin: 0;
+}
+.stage-head svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--brand);
+}
+.stage-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+.stage-card ul {
+  margin: 0;
+  padding-left: 1.05rem;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.stage-card li {
+  color: var(--ink-650);
+  font-size: 0.86rem;
+}
+.how-tagline {
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-650);
+  font-size: 0.95rem;
+}
+.how-tagline strong {
+  color: var(--brand);
+}
+
+@media (max-width: 720px) {
+  .stage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 지원·기한 패널의 마감일 배지 */
+.deadline-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.deadline-chip.tone-cal {
+  background: var(--info);
+}
+/* .brief-list span (color: ink-650) 이 배지 글자를 어둡게 덮어 배경과 안 보였다.
+   더 높은 specificity로 흰색을 강제한다 (사용자 지적 2026-07-15). */
+.brief-list span.deadline-chip,
+.support-row-main span.deadline-chip {
+  color: #fff;
+}
+
+/* 오늘 탭 지원·기한: 클릭 가능한 지원 행 + 더보기 버튼 */
+.support-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.support-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.support-row:hover {
+  border-color: var(--brand);
+  background: #fff;
+}
+.support-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.support-row-main strong {
+  font-size: 0.9rem;
+}
+.support-row > svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--ink-650);
+  flex: 0 0 auto;
+}
+.more-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  width: 100%;
+  justify-content: center;
+  border: 1px dashed var(--brand);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.more-button:hover {
+  background: var(--surface-soft);
+}
+.more-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* 지원 탭: 상세 지원 카드 */
+.support-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+.support-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.support-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.support-card-head h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.support-card-head .deadline-chip {
+  margin-left: 0;
+}
+.support-amount {
+  margin: 0;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.support-cond {
+  margin: 0;
+  color: var(--ink-650);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.support-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  align-self: flex-start;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.support-link:hover {
+  filter: brightness(1.08);
+}
+.support-link svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
 .today-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
@@ -383,6 +613,52 @@ h3 {
 
 .section-title .eyebrow {
   margin-bottom: 0.15rem;
+}
+
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line, #d8dee9);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-650, #4a5568);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ghost-button:hover {
+  background: var(--surface-muted, #f1f4f9);
+  border-color: var(--accent, #3b6ef6);
+  color: var(--accent, #3b6ef6);
+}
+
+.ghost-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.followup-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  background: var(--surface-muted, #eef3fb);
+  color: var(--accent, #3b6ef6);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.followup-note svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .status-badge,
@@ -432,8 +708,63 @@ h3 {
 }
 
 .family-profile .form-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+
+/* 자녀 수 + 자녀별 출생 연월 + 출산 예정일 */
+.expecting-field,
+.children-field {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.children-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.children-head .field-label { margin: 0; }
+.children-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.children-count button {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--brand);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.children-count button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.children-count button:not(:disabled):hover {
+  border-color: var(--brand);
+  background: #fff;
+}
+.child-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.child-label {
+  flex: 0 0 2.6rem;
+  color: var(--ink-650);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.child-row input { flex: 1; }
 
 .field-label {
   display: block;
@@ -734,10 +1065,81 @@ h3 {
   min-height: 330px;
 }
 
+/* 상담 결과 창을 채팅창으로: 메시지 영역은 스크롤, 입력창은 하단 고정. */
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  max-height: min(72vh, 760px);
+}
+
+.chat-window .conversation-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
 .conversation-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* 채팅 입력창 (결과 창 하단 + 시작 화면 공용) */
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.chat-start .chat-composer {
+  border-top: none;
+  padding-top: 0;
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.composer-row textarea {
+  flex: 1 1 auto;
+  min-height: 44px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink-900, inherit);
+}
+
+.composer-row textarea:focus-visible {
+  outline: 2px solid var(--accent, #3b6ef6);
+  outline-offset: 1px;
+}
+
+.send-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  align-self: stretch;
+}
+
+.chat-composer .form-status:empty {
+  display: none;
+}
+
+.chat-start-hint {
+  margin: 0 0 0.9rem;
+  color: var(--ink-650, #4a5568);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .message-user,
@@ -769,6 +1171,67 @@ h3 {
 
 .message-agent p {
   background: var(--surface-soft);
+}
+
+/* 봇 markdown 답변 버블 — 헤더/목록/링크/인용을 실제로 렌더 (기호 노출 방지). */
+.message-agent .md-body {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.85rem;
+  background: var(--surface-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.md-body p {
+  margin: 0;
+  border: none;
+  padding: 0;
+  background: none;
+  white-space: pre-wrap;
+}
+.md-body .md-h {
+  font-weight: 700;
+  margin: 0.35rem 0 0;
+  line-height: 1.3;
+}
+.md-body .md-h1 { font-size: 1.05rem; }
+.md-body .md-h2 { font-size: 1rem; }
+.md-body .md-h3 { font-size: 0.96rem; }
+.md-body .md-h4,
+.md-body .md-h5,
+.md-body .md-h6 { font-size: 0.9rem; }
+/* .message-agent strong 의 0.7rem 회색(발신자명용)을 마크다운 볼드에서 되돌린다. */
+.md-body strong {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 700;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0;
+  padding-left: 1.3rem;
+}
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+.md-body li { margin: 0.2rem 0; }
+.md-body a {
+  color: var(--info);
+  text-decoration: underline;
+}
+.md-body blockquote {
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--line);
+  color: var(--ink-650);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+}
+.md-body hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  width: 100%;
+  margin: 0.35rem 0;
 }
 
 .message-user strong,
@@ -1547,17 +2010,38 @@ h3 {
 .draft-card > summary svg { width: 1rem; height: 1rem; }
 .draft-body {
   margin: 0.7rem 0 0;
-  padding: 0.7rem 0.85rem;
+  padding: 0.85rem 1rem;
   background: var(--surface);
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
-  white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.85rem;
   line-height: 1.55;
-  max-height: 22rem;
+  max-height: 26rem;
   overflow-y: auto;
 }
+/* 초안 본문은 문서라 헤더 간격을 조금 넉넉하게 (채팅 버블보다 문서 느낌). */
+.draft-body .md-body { gap: 0.55rem; }
+.draft-body .md-body .md-h { margin-top: 0.5rem; }
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink-650);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.copy-button:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.copy-button svg { width: 0.9rem; height: 0.9rem; }
 .draft-actions { margin-top: 0.6rem; }
 .draft-actions ol { margin: 0.3rem 0 0; padding-left: 1.2rem; }
 .calc-card {

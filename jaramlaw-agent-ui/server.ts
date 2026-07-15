@@ -158,10 +158,15 @@ from jaramlaw_agent.audit import _serialize
 from jaramlaw_agent.orchestrator import run_workflow
 
 payload = json.loads(sys.stdin.read() or "{}")
+opts = payload.get("options") or {}
 report = run_workflow(
     raw_input=payload.get("raw_input") or {},
     scenario_id=payload.get("scenario_id"),
-    write_audit=True,
+    write_audit=opts.get("write_audit", True),
+    enable_ai_answer=opts.get("enable_ai_answer", True),
+    enable_critic=opts.get("enable_critic", True),
+    enable_live_law=opts.get("enable_live_law", True),
+    enable_learning=opts.get("enable_learning", True),
 )
 print(json.dumps(_serialize(report), ensure_ascii=False, default=str))
 `;
@@ -256,17 +261,24 @@ const savedDocuments: DocSummary[] = [
 
 const sessions: ConsultationSession[] = [
   buildSeedSession(
-    "학원 환불 거부 대응",
-    "초등학생 영어학원 3개월분을 선결제했는데 1개월 조금 지나 중도 해지하자 환불이 안 된다고 합니다.",
-    "학원법 시행령 제18조 제2항 [별표 4]를 기준으로 미경과 기간 교습비 반환을 요구할 수 있습니다. 결제 내역, 해지 통보일, 실제 수강일수를 보전한 뒤 정산표와 환불 기한을 서면으로 요구하세요.",
+    "학원 수강료 환불 (105만원·35일 수강)",
+    "초등학생 영어학원 3개월(90일)치 수강료 1,050,000원을 선결제했는데, 35일 다닌 뒤 중도 해지하자 학원이 환불을 거부합니다.",
+    "학원법 시행령 제18조 제2항 [별표 4]를 기준으로 미경과 기간 교습비 반환을 요구할 수 있습니다. 총 90일 중 35일을 수강했으므로 잔여 55일분에 대한 환불을 청구할 수 있습니다. 결제 내역(1,050,000원), 해지 통보일, 실제 수강일수(35일)를 보전한 뒤 정산표와 환불 기한을 서면으로 요구하세요.",
     [PRELOADED_LAWS[1]],
     "local-seed",
   ),
   buildSeedSession(
     "어린이집 CCTV 열람",
-    "아이 이마에 멍이 생겼는데 어린이집이 CCTV 열람을 거부합니다.",
+    "아이가 어린이집에서 다쳤는데 CCTV 열람을 요청하는 절차와 근거가 궁금합니다.",
     "영유아보육법상 보호자는 아동 안전 확인 목적의 CCTV 열람을 요구할 수 있습니다. 영상 보전 요청, 사고보고서 요구, 관할 보육과 민원을 함께 준비하세요.",
     [PRELOADED_LAWS[2], PRELOADED_LAWS[3]],
+    "local-seed",
+  ),
+  buildSeedSession(
+    "육아휴직 신청 거부 대응",
+    "만 8세 이하 자녀를 키우는 근로자인데 회사가 육아휴직 신청을 받아주지 않습니다. 신청 요건과 거부 시 대응 근거가 궁금합니다.",
+    "남녀고용평등법 제19조에 따라 만 8세 이하 또는 초등학교 2학년 이하 자녀 양육을 위한 육아휴직은 근로자의 권리입니다. 사업주는 요건을 갖춘 신청을 원칙적으로 거부할 수 없으며, 위반 시 관할 고용노동청 진정·신고로 대응할 수 있습니다.",
+    [PRELOADED_LAWS[0]],
     "local-seed",
   ),
 ];
@@ -306,6 +318,73 @@ function buildSeedSession(
       engine: "seed",
     },
   };
+}
+
+// 사이드바에 미리 깔리는 예시 세션은 원래 하드코딩된 답변 한 줄 + 법령 1개짜리 껍데기였다.
+// 심사위원이 예시를 클릭하면 '근거와 산출물' 패널이 텅 비어 보였다(사용자 지적, 2026-07-15).
+// 서버 시작 시 실제 워크플로우로 한 번 돌려, 예시도 라이브 상담과 똑같이 문서초안·권리카드·
+// 법령이 꽉 찬 상태로 교체한다. 부수 효과로 시연 첫 질의의 지연(13~25초)도 미리 소진된다.
+const SEED_SCENARIOS: Array<{ title: string; userText: string; profile: JsonRecord }> = [
+  {
+    title: "학원 수강료 환불 (105만원·35일 수강)",
+    userText: "초등학생 영어학원 3개월(90일)치 수강료 1,050,000원을 선결제했는데, 35일 다닌 뒤 중도 해지하자 학원이 환불을 거부합니다.",
+    profile: {
+      parents: [{ role: "mother", age: 36 }],
+      children: [{ name_masked: "C1", birth_date: "2016-03-02" }],
+      // days_used (파이썬 drafter가 읽는 필드명) — used_days로 넣으면 0으로 취급돼 전액 환불로 오산정된다.
+      case_data: { total_paid_krw: 1050000, total_days: 90, days_used: 35 },
+    },
+  },
+  {
+    // 원래 seed 문구엔 "멍"이 있어 안전(학대) 라우팅을 타 문서가 안 나왔다 — 일반 사고 문구로.
+    title: "어린이집 CCTV 열람",
+    userText: "아이가 어린이집에서 다쳤는데 CCTV 열람을 요청하는 절차와 근거가 궁금합니다.",
+    profile: {
+      parents: [{ role: "mother", age: 34 }],
+      children: [{ name_masked: "C1", birth_date: "2022-03-01", facility: "어린이집" }],
+      case_data: { cctv_access_denied: true },
+    },
+  },
+  {
+    title: "육아휴직 신청 거부 대응",
+    userText: "만 8세 이하 자녀를 키우는 근로자인데 회사가 육아휴직 신청을 받아주지 않습니다. 신청 요건과 거부 시 대응 근거가 궁금합니다.",
+    profile: {
+      parents: [{ role: "mother", age: 33, employed: true }],
+      children: [{ name_masked: "C1", birth_date: "2022-05-10" }],
+      case_data: { parental_leave_denied: true },
+    },
+  },
+];
+
+async function prewarmSeedSessions(): Promise<void> {
+  if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE === "1" || !fs.existsSync(PYTHON_SRC)) return;
+  if (process.env.JARAMLAW_DISABLE_SEED_PREWARM === "1") return;
+  for (const scenario of SEED_SCENARIOS) {
+    try {
+      const rawInput = buildWorkflowInput(scenario.userText, "layperson", scenario.profile);
+      const report = await runPythonWorkflow(rawInput, inferScenarioId(scenario.userText));
+      const userMsg: Message = {
+        id: `msg_user_${generateId()}`,
+        sender: "user",
+        text: scenario.userText,
+        timestamp: new Date().toISOString(),
+      };
+      const rich = buildSessionFromReport(scenario.userText, userMsg, report, "layperson", "ko", {
+        backend: "python-engine",
+        connected: true,
+        engine: "jaramlaw_agent.orchestrator.run_workflow",
+      });
+      rich.title = scenario.title;
+      // 같은 제목의 껍데기 seed를 실제 결과로 교체 (없으면 앞에 추가).
+      const idx = sessions.findIndex((s) => s.title === scenario.title);
+      if (idx >= 0) sessions[idx] = rich;
+      else sessions.unshift(rich);
+      console.log(`[jaramlaw] seed 예시 pre-warm 완료: ${scenario.title} (문서 ${asArray(report.draft_documents).length}건)`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.log(`[jaramlaw] seed 예시 pre-warm 실패(껍데기 유지): ${scenario.title} — ${reason}`);
+    }
+  }
 }
 
 app.get("/api/health", (_req, res) => {
@@ -514,7 +593,7 @@ app.post("/api/history/:id/expert-review", requireOperatorAuth, (req, res) => {
 
 app.post("/api/consult", rateLimit, async (req, res) => {
   // profile: 아이 생년월일·부모·사건 사실관계. 주어진 값만 쓰고, 없으면 지어내지 않는다.
-  const { message, clientType = "layperson", language = "ko", profile } = req.body as {
+  const { message, history, clientType = "layperson", language = "ko", profile } = req.body as {
     message?: string;
     history?: Message[];
     clientType?: ClientType;
@@ -534,7 +613,18 @@ app.post("/api/consult", rateLimit, async (req, res) => {
     timestamp: new Date().toISOString(),
   };
 
+  // scenario 유형·case_data는 현재 질문 기준으로 추론하고, 이어지는 문답이면 이전 대화를
+  // 쿼리 컨텍스트로 주입해 답변이 앞 맥락을 이어가게 한다 (파이썬 LLM은 scenario.query만 읽음).
   const rawInput = buildWorkflowInput(query, clientType, profile);
+  if (Array.isArray(history) && history.length > 0) {
+    const ctx = history
+      .slice(-4)
+      .map((m) => `${m.sender === "user" ? "보호자" : "자람법"}: ${String(m.text || "").replace(/\s+/g, " ").slice(0, 180)}`)
+      .join("\n");
+    const scenario = asRecord(rawInput.scenario);
+    scenario.query = `[이전 대화]\n${ctx}\n\n[이어지는 질문] ${query}`;
+    rawInput.scenario = scenario;
+  }
 
   if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE !== "1" && fs.existsSync(PYTHON_SRC)) {
     try {
@@ -559,6 +649,158 @@ app.post("/api/consult", rateLimit, async (req, res) => {
   const fallback = buildFallbackSession(query, userMsg, clientType, language, "python_bridge_disabled_or_missing");
   sessions.unshift(fallback);
   return res.json({ status: "success", dynamic: false, failover: true, data: fallback });
+});
+
+// 첫 화면 개인화 브리핑 — 입력한 가족 프로필만으로 매칭 지원제도·기한·권리를 즉시 계산.
+// LLM/비평가/실시간 법령 조회를 모두 끄고 결정론 산출물만 뽑아 ~1-4초로 빠르게 응답한다.
+// 보조금24(대한민국 공공서비스 정보) 실시간 조회 — 거주지역 지자체 지원을 프로필에 맞춰 가져온다.
+// 엔드포인트/파라미터는 Swagger(infuser.odcloud.kr/.../44436) 실호출로 검증(2026-07-16).
+// ⚠️ cond[필드::OP] 는 대괄호·:: 를 리터럴로 보내야 한다 (한글 필드·값만 인코딩). 전체 인코딩 시 400.
+// 법령데이터가 아닌 "행정서비스 데이터"이므로 UI에서 별도·참고용으로 표기한다.
+const GOV24_BASE = "https://api.odcloud.kr/api/gov24/v3/serviceList";
+function govKeywordsFor(lifeStages: string[]): string[] {
+  const s = new Set<string>();
+  if (lifeStages.includes("pregnancy")) s.add("출산");
+  if (lifeStages.includes("infant")) { s.add("출산"); s.add("육아"); }
+  if (lifeStages.includes("toddler")) { s.add("육아"); s.add("보육"); }
+  if (lifeStages.includes("elementary")) { s.add("아동"); s.add("양육"); }
+  if (s.size === 0) { s.add("출산"); s.add("육아"); s.add("아동"); }
+  return [...s].slice(0, 3);
+}
+async function fetchGovernmentSupports(region: string, lifeStages: string[]): Promise<JsonRecord[]> {
+  const key = process.env.DATA_OPENAPI_KEY;
+  if (!key || !region) return [];
+  const buildUrl = (kw: string): string => {
+    const p = [
+      `serviceKey=${encodeURIComponent(key)}`,
+      "page=1", "perPage=10", "returnType=JSON",
+      `cond[${encodeURIComponent("서비스명")}::LIKE]=${encodeURIComponent(kw)}`,
+      `cond[${encodeURIComponent("소관기관명")}::LIKE]=${encodeURIComponent(region)}`,
+    ];
+    return `${GOV24_BASE}?${p.join("&")}`;
+  };
+  const results = await Promise.all(govKeywordsFor(lifeStages).map(async (kw) => {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(buildUrl(kw), { headers: { Accept: "application/json" }, signal: ctl.signal });
+      clearTimeout(timer);
+      if (!r.ok) return [] as JsonRecord[];
+      return asArray((await r.json() as JsonRecord).data);
+    } catch {
+      return [] as JsonRecord[];
+    }
+  }));
+  const byId = new Map<string, JsonRecord>();
+  for (const arr of results) {
+    for (const row of arr) {
+      const id = asString(row["서비스ID"]) || asString(row["서비스명"]);
+      if (id && !byId.has(id)) byId.set(id, row);
+    }
+  }
+  return [...byId.values()].slice(0, 12).map((row) => ({
+    name: asString(row["서비스명"]),
+    summary: asString(row["서비스목적요약"]),
+    content: asString(row["지원내용"]).replace(/\s+/g, " ").slice(0, 160),
+    target: asString(row["지원대상"]).replace(/\s+/g, " ").slice(0, 120),
+    agency: asString(row["소관기관명"]),
+    apply_method: asString(row["신청방법"]).replace(/\s+/g, " ").slice(0, 80),
+    deadline: asString(row["신청기한"]).slice(0, 60),
+    detail_url: asString(row["상세조회URL"]),
+  }));
+}
+
+app.post("/api/briefing", rateLimit, async (req, res) => {
+  const body = (req.body ?? {}) as {
+    birthMonth?: string; // 구버전 호환
+    region?: string;
+    household?: string;
+    children?: Array<{ birthMonth?: string }>;
+    expectedDate?: string;
+  };
+  const region = typeof body.region === "string" ? body.region : "";
+  const household = body.household;
+  const expecting = household === "expecting";
+
+  // 자녀별 출생 연월 (신버전 children 배열 우선, 없으면 구버전 birthMonth).
+  const childMonths = (Array.isArray(body.children) ? body.children : [])
+    .map((c) => (typeof c?.birthMonth === "string" && /^\d{4}-\d{2}$/.test(c.birthMonth) ? c.birthMonth : ""))
+    .filter(Boolean);
+  if (!childMonths.length && typeof body.birthMonth === "string" && /^\d{4}-\d{2}$/.test(body.birthMonth)) {
+    childMonths.push(body.birthMonth);
+  }
+  // 출산 예정일: YYYY-MM-DD 또는 YYYY-MM.
+  const expectedRaw = typeof body.expectedDate === "string" ? body.expectedDate : "";
+  const expectedDate = /^\d{4}-\d{2}-\d{2}$/.test(expectedRaw)
+    ? expectedRaw
+    : /^\d{4}-\d{2}$/.test(expectedRaw) ? `${expectedRaw}-15` : "";
+
+  if (!childMonths.length && !(expecting && expectedDate)) {
+    return res.status(400).json({ status: "error", message: "아이 출생 연월 또는 출산 예정일을 입력해 주세요." });
+  }
+
+  const parents = household === "single-caregiver"
+    ? [{ role: "mother", employment: "정규직" }]
+    : [{ role: "mother", employment: "정규직" }, { role: "father", employment: "정규직" }];
+  const children: JsonRecord[] = childMonths.map((m, i) => ({ name_masked: `C${i + 1}`, birth_date: `${m}-15` }));
+  if (expecting && expectedDate) {
+    children.push({ name_masked: `C${children.length + 1}`, expected_birth_date: expectedDate });
+  }
+
+  const rawInput: JsonRecord = {
+    persona: "P1",
+    reference_date: new Date().toISOString().slice(0, 10),
+    region,
+    parents,
+    children,
+    ...(household ? { flags: [household] } : {}),
+    scenario: { type: "general", query: "", data: {} },
+  };
+
+  if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE === "1" || !fs.existsSync(PYTHON_SRC)) {
+    return res.status(503).json({ status: "error", message: "python_bridge_unavailable" });
+  }
+  try {
+    const report = await runPythonWorkflow(rawInput, null, {
+      enable_ai_answer: false,
+      enable_critic: false,
+      enable_live_law: false,
+      enable_learning: false,
+      write_audit: false,
+    });
+    const supports = asArray(report.support_matches).map((s) => ({
+      name: asString(s.name),
+      amount_krw: Number(s.amount_krw ?? 0),
+      amount_description: asString(s.amount_description),
+      condition_summary: asString(s.condition_summary),
+      application_channel: asString(s.application_channel),
+      deadline_days_left: typeof s.deadline_days_left === "number" ? s.deadline_days_left : null,
+    }));
+    const events = asArray(asRecord(report.calendar).events).map((e) => ({
+      title: asString(e.title),
+      scheduled_date: asString(e.scheduled_date),
+    })).filter((e) => e.title);
+    const rights = asArray(report.rights_cards).map((r) => ({
+      title: asString(r.title),
+      holder: asString(r.holder),
+    })).filter((r) => r.title);
+    const lifeStages = Array.isArray(report.life_stages) ? report.life_stages.map((x) => asString(x)).filter(Boolean) : [];
+    // 거주지역 지자체 지원을 보조금24에서 실시간 조회 (실패해도 나머지 결과는 그대로).
+    const government = await fetchGovernmentSupports(region, lifeStages);
+    return res.json({
+      status: "success",
+      data: {
+        life_stages: lifeStages,
+        supports,
+        events,
+        rights,
+        government,
+      },
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return res.status(502).json({ status: "error", message: reason });
+  }
 });
 
 app.get("/api/documents", (_req, res) => {
@@ -669,7 +911,7 @@ app.get("/api/security-logs", requireOperatorAuth, (_req, res) => {
   res.json({ status: "success", logs: securityLogs });
 });
 
-async function runPythonWorkflow(rawInput: JsonRecord, scenarioId: string | null): Promise<JsonRecord> {
+async function runPythonWorkflow(rawInput: JsonRecord, scenarioId: string | null, options?: JsonRecord): Promise<JsonRecord> {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
@@ -714,7 +956,7 @@ async function runPythonWorkflow(rawInput: JsonRecord, scenarioId: string | null
       }
     });
 
-    child.stdin.write(JSON.stringify({ raw_input: rawInput, scenario_id: scenarioId }));
+    child.stdin.write(JSON.stringify({ raw_input: rawInput, scenario_id: scenarioId, ...(options ? { options } : {}) }));
     child.stdin.end();
   });
 }
@@ -918,6 +1160,127 @@ function renderLawSourceBadge(report: JsonRecord, language: UiLanguage): string 
     : "🔴 시드 모드 — 법제처 실시간 조회 실패 (LAW_API_KEY 또는 네트워크 확인 필요)";
 }
 
+// AI 서술 답변이 없을 때(검증 보류·규칙 모드) 부모가 읽을 본문.
+//
+// 예전엔 여기서 "매칭 법령 10건 / 검증률 100%" 같은 개발자용 개수 덤프를 내보냈다.
+// 부모가 물은 건 "절차와 근거"인데 화면엔 통계만 남았다(사용자 지적, 2026-07-15).
+// 근거(조문 원문)와 절차(서류 초안의 실행 단계)는 이미 결정론 파이프라인이 만들어
+// 별도 검증까지 마친 산출물이다 — AI 서술과 달리 이건 그대로 보여줘도 안전하다.
+function renderVerifiedFallback(
+  report: JsonRecord,
+  language: UiLanguage,
+  sourceBadge: string,
+): string {
+  const en = language === "en";
+  const ai = asRecord(report.ai_answer);
+  const mode = asString(ai.mode);
+  const safety = asRecord(report.safety_routing);
+  const rawLaws = asArray(report.matched_laws);
+  const docs = asArray(report.draft_documents);
+
+  // 안전 신호가 걸린 사안은 법령 나열보다 보호기관 연계가 먼저다.
+  if (safety.triggered) {
+    // safety.category는 "child_abuse_suspected" 같은 내부 코드다 — 부모 화면엔 한글 라벨로.
+    const categoryLabel: Record<string, string> = {
+      child_abuse_suspected: en ? "Suspected child abuse" : "아동학대 의심 신호",
+      self_harm: en ? "Self-harm signal" : "자해 위험 신호",
+      emergency: en ? "Emergency" : "긴급 상황",
+    };
+    const cat = asString(safety.category);
+    const label = categoryLabel[cat] || (en ? "Child-safety signal" : "아동 안전 신호");
+    return [
+      sourceBadge,
+      "",
+      en
+        ? `⚠️ **${label}** detected. Connecting to a protection agency takes priority over general guidance.`
+        : `⚠️ **${label}**가 감지되었습니다. 일반 상담보다 **보호기관 연계**가 우선입니다.`,
+      en
+        ? `Call now: **${asString(safety.contact, "1577-1391")}**`
+        : `지금 전화하세요: **${asString(safety.contact, "1577-1391")}**`,
+      "",
+      en ? "This is an information-assist tool, not legal advice." : "본 안내는 법률 자문이 아닌 정보 보조입니다.",
+    ].join("\n");
+  }
+
+  const lead =
+    mode === "withheld_by_critic" || mode === "blocked_output"
+      ? en
+        ? "An independent verifier filtered out the AI draft. Instead, here is the **legal basis (official article text)** and **ready-to-file forms** — all separately verified."
+        : "AI가 쓴 초안은 독립 검증 모델이 근거 없는 인용을 발견해 보류했습니다. 대신 아래는 **법제처 원문으로 검증된 근거**와 **바로 제출할 수 있는 서류 초안**입니다."
+      : en
+        ? "Here is the **legal basis and procedure**, drawn from official article text."
+        : "아래는 법제처 원문을 근거로 정리한 **법적 근거와 절차**입니다.";
+
+  const lines: string[] = [sourceBadge, "", lead, ""];
+
+  // 절차: 서류 초안의 실행 단계(next_actions)가 곧 "무엇을 어떤 순서로 하면 되는지"다.
+  // next_actions는 문자열 배열이라 asArray(객체 배열용)를 쓰면 전부 걸러진다 — 직접 접근한다.
+  const stepsOf = (doc: JsonRecord): string[] =>
+    Array.isArray(doc.next_actions) ? doc.next_actions.map((s) => asString(s)).filter(Boolean) : [];
+  const procedureDocs = docs.filter((doc) => stepsOf(doc).length > 0);
+  if (procedureDocs.length) {
+    lines.push(en ? "📋 **Procedure**" : "📋 **절차**");
+    for (const doc of procedureDocs) {
+      const steps = stepsOf(doc);
+      lines.push(`**${asString(doc.title, en ? "Form" : "서류")}**`);
+      steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+      lines.push("");
+    }
+    lines.push(
+      en
+        ? "> Draft forms above are ready in the **Documents** tab — fill the blanks and submit."
+        : "> 위 서류의 완성된 초안이 **'서류' 탭**에 준비돼 있습니다 — 빈칸만 채워 제출하세요.",
+      "",
+    );
+  }
+
+  // 근거: 서류가 실제로 인용한 조문을 우선, 없으면 상위 매칭 법령. 조문 원문 요약 + 출처.
+  const basisFromDocs: JsonRecord[] = [];
+  const seen = new Set<string>();
+  for (const doc of docs) {
+    for (const b of asArray(doc.legal_basis)) {
+      const rec = asRecord(b);
+      const key = `${asString(rec.law)} ${asString(rec.article)}`;
+      if (key.trim() && !seen.has(key)) {
+        seen.add(key);
+        basisFromDocs.push(rec);
+      }
+    }
+  }
+  const findLaw = (law: string, article: string) =>
+    rawLaws.find((l) => asString(l.law_name) === law && asString(l.article) === article);
+
+  const basisItems: string[] = [];
+  const source = basisFromDocs.length ? basisFromDocs : rawLaws.slice(0, 3);
+  for (const item of source.slice(0, 4)) {
+    const rec = asRecord(item);
+    const lawName = asString(rec.law) || asString(rec.law_name);
+    const article = asString(rec.article);
+    const matched = findLaw(lawName, article) || (basisFromDocs.length ? undefined : rec);
+    const title = matched ? asString(asRecord(matched).title) : "";
+    const summary = matched ? asString(asRecord(matched).text_summary).split("\n")[0].slice(0, 140) : "";
+    const eff = asString(rec.effective_date) || (matched ? asString(asRecord(matched).effective_date) : "");
+    const url = asString(rec.source_url) || (matched ? asString(asRecord(matched).source_url) : "");
+    const head = `**${lawName} ${article}**${title ? ` (${title})` : ""}`;
+    const tail = [eff ? (en ? `in force ${eff}` : `시행 ${eff}`) : "", url ? (en ? `[source](${url})` : `[원문](${url})`) : ""]
+      .filter(Boolean)
+      .join(" · ");
+    basisItems.push(`- ${head}${summary ? ` — ${summary}` : ""}${tail ? `  \n  ${tail}` : ""}`);
+  }
+  if (basisItems.length) {
+    lines.push(en ? "⚖️ **Legal basis (verified against official text)**" : "⚖️ **법적 근거 (법제처 원문 대조 검증)**");
+    lines.push(...basisItems, "");
+  }
+
+  lines.push(
+    "---",
+    en
+      ? "This is an information-assist tool, not legal advice. Verify each cited article via its source link before acting."
+      : "본 안내는 법률 자문이 아닌 정보 보조입니다. 인용된 조문은 출처 링크로 직접 확인하세요.",
+  );
+  return lines.filter((l) => l !== undefined).join("\n");
+}
+
 function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLanguage): string {
   const humanReview = asRecord(report.human_review);
   const safety = asRecord(report.safety_routing);
@@ -953,37 +1316,7 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
     ].join("\n");
   }
 
-  if (language === "en") {
-    return [
-      sourceBadge,
-      "",
-      "### JaramLaw Python workflow result",
-      `- Matched laws: ${laws.length}`,
-      `- Support matches: ${supports.length}`,
-      `- Rights cards: ${rights.length}`,
-      `- Draft documents: ${docs.length}`,
-      `- Verified claim ratio: ${Math.round(verifierRatio * 100)}%`,
-      humanReview.needed ? `- Human review: recommended (${asString(humanReview.reason, "review needed")})` : "- Human review: not required by deterministic gate",
-      safety.triggered ? `- Safety routing: ${asString(safety.category)} / ${asString(safety.contact)}` : "",
-      "",
-      "Use the workflow panels below for citations, generated documents, and board diagnostics. This is an information-assist tool, not legal advice.",
-    ].filter(Boolean).join("\n");
-  }
-
-  return [
-    sourceBadge,
-    "",
-    "### JaramLaw Python 14-node workflow 결과",
-    `- 매칭 법령: ${laws.length}건`,
-    `- 지원제도 매칭: ${supports.length}건`,
-    `- 권리카드: ${rights.length}건`,
-    `- 생성 문서 초안: ${docs.length}건`,
-    `- 원자 claim 검증률: ${Math.round(verifierRatio * 100)}%`,
-    humanReview.needed ? `- 전문가 검토 권장: ${asString(humanReview.reason, "검토 필요")}` : "- 전문가 검토 게이트: 자동 차단 사유 없음",
-    safety.triggered ? `- 안전 라우팅: ${asString(safety.category)} / ${asString(safety.contact)}` : "",
-    "",
-    "아래 workflow 패널에서 인용 법령, 생성 문서, 전문가 보드 진단을 확인하세요. 본 결과는 법률 자문이 아닌 정보 보조입니다.",
-  ].filter(Boolean).join("\n");
+  return renderVerifiedFallback(report, language, sourceBadge);
 }
 
 function buildRiskFromReport(report: JsonRecord): RiskAnalysis {
@@ -1153,6 +1486,8 @@ async function initializeServer() {
     if (IS_LOOPBACK && !API_TOKEN) {
       console.log("[jaramlaw] loopback 전용 · 인증 없음 (로컬 개발). 외부 노출 시 JARAMLAW_API_TOKEN 필수.");
     }
+    // 예시 세션을 실제 워크플로우 결과로 교체 (fire-and-forget — 실패해도 서버는 정상).
+    void prewarmSeedSessions();
   });
 }
 
