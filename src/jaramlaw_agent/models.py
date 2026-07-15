@@ -39,7 +39,7 @@ class LifeStage(str, Enum):
 @dataclass
 class Parent:
     role: str  # mother | father | guardian
-    age: int
+    age: Optional[int] = None
     employment: Optional[str] = None
     region_code: Optional[str] = None  # 행정구역 코드 (KOSIS)
 

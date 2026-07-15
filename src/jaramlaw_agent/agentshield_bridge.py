@@ -149,7 +149,7 @@ def _law_domains() -> list[str]:
 
 
 def get_guard() -> Any:
-    """RuntimeGuard.hardened() 싱글톤. AgentShield 부재 시 None."""
+    """AgentShield 버전에 맞는 RuntimeGuard 싱글톤. 부재 시 None."""
     global _GUARD
     if not AGENTSHIELD_AVAILABLE:
         return None
@@ -164,9 +164,14 @@ def get_guard() -> Any:
             allowed_tool_permissions=["read", "search", "http_get"],
             allowed_domains=_law_domains(),
         )
-        # hardened(): 정규식만 쓰는 맨 guard는 의역·다국어 인젝션을 놓친다.
-        # 의존성 없는 KeywordSemanticDetector를 미리 물려 그 구멍을 메운다.
-        _GUARD = RuntimeGuard.hardened(policy)
+        # AgentShield의 초기 API는 hardened() 팩토리를 제공했고, 현재 API는
+        # detector 주입 생성자를 제공한다. 기능 감지로 두 버전을 모두 지원한다.
+        if hasattr(RuntimeGuard, "hardened"):
+            _GUARD = RuntimeGuard.hardened(policy)
+        else:
+            from agent_shield.detectors import KeywordSemanticDetector
+
+            _GUARD = RuntimeGuard(policy, input_detectors=[KeywordSemanticDetector()])
     return _GUARD
 
 

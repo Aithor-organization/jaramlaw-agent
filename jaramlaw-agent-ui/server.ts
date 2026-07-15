@@ -551,7 +551,7 @@ app.post("/api/consult", rateLimit, async (req, res) => {
       const reason = error instanceof Error ? error.message : String(error);
       const fallback = buildFallbackSession(query, userMsg, clientType, language, reason);
       sessions.unshift(fallback);
-      addSecurityLog("KEY_ROTATION", `${query.length} chars`, `Python bridge failed; deterministic fallback used. ${reason.slice(0, 120)}`);
+      addSecurityLog("KEY_ROTATION", `${query.length} chars`, "Python workflow unavailable; deterministic fallback used. code=python_workflow_unavailable");
       return res.json({ status: "success", dynamic: false, failover: true, data: fallback });
     }
   }
@@ -734,8 +734,28 @@ function buildWorkflowInput(
   const scenarioType = inferScenarioType(message);
   const supplied = asRecord(profile);
 
-  const children = asArray(supplied.children).map((child) => asRecord(child));
-  const parents = asArray(supplied.parents).map((parent) => asRecord(parent));
+  const children = asArray(supplied.children).map((value, index) => {
+    const child = asRecord(value);
+    return {
+      name_masked: asString(child.name_masked, `C${index + 1}`),
+      ...(asString(child.birth_date) ? { birth_date: asString(child.birth_date) } : {}),
+      ...(asString(child.expected_birth_date) ? { expected_birth_date: asString(child.expected_birth_date) } : {}),
+      ...(Number.isFinite(Number(child.pregnancy_week)) ? { pregnancy_week: Number(child.pregnancy_week) } : {}),
+      ...(asString(child.sex) ? { sex: asString(child.sex) } : {}),
+      ...(asString(child.facility) ? { facility: asString(child.facility) } : {}),
+      ...(typeof child.disability === "boolean" ? { disability: child.disability } : {}),
+    };
+  });
+  const parents = asArray(supplied.parents).map((value) => {
+    const parent = asRecord(value);
+    const role = ["mother", "father", "guardian"].includes(asString(parent.role)) ? asString(parent.role) : "guardian";
+    return {
+      role,
+      ...(Number.isFinite(Number(parent.age)) ? { age: Number(parent.age) } : {}),
+      ...(asString(parent.employment) ? { employment: asString(parent.employment) } : {}),
+      ...(asString(parent.region_code) ? { region_code: asString(parent.region_code) } : {}),
+    };
+  });
   const events = asArray(supplied.events).map((event) => asRecord(event));
   const flags = asArray(supplied.flags).map(String);
   const caseData = asRecord(supplied.case_data);
@@ -821,10 +841,13 @@ function buildFallbackSession(
   reason: string,
 ): ConsultationSession {
   const laws = selectRelevantLaws(query);
+  const publicReason = reason === "python_bridge_disabled_or_missing"
+    ? "python_bridge_disabled_or_missing"
+    : "python_workflow_unavailable";
   const botText =
     language === "en"
-      ? `The Python workflow bridge is unavailable, so JaramLaw used the deterministic local route.\n\nRelevant legal anchors: ${laws.map((law) => law.title).join(", ")}.\n\nBridge note: ${reason}`
-      : `Python workflow 브리지가 응답하지 않아 로컬 deterministic 경로로 진단했습니다.\n\n관련 법령 축: ${laws.map((law) => law.title).join(", ")}\n\n브리지 상태: ${reason}`;
+      ? `The Python workflow bridge is unavailable, so JaramLaw used the deterministic local route.\n\nRelevant legal anchors: ${laws.map((law) => law.title).join(", ")}.\n\nBridge status: ${publicReason}`
+      : `Python workflow 브리지가 응답하지 않아 로컬 deterministic 경로로 진단했습니다.\n\n관련 법령 축: ${laws.map((law) => law.title).join(", ")}\n\n브리지 상태: ${publicReason}`;
 
   return {
     id: `session_${generateId()}`,
@@ -851,7 +874,7 @@ function buildFallbackSession(
       backend: "local-rule-engine",
       connected: false,
       engine: "deterministic-fallback",
-      fallback_reason: reason,
+      fallback_reason: publicReason,
     },
   };
 }

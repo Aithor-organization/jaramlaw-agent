@@ -256,7 +256,7 @@ export default function App() {
             </div>
           </nav>
 
-          <main id="main-content" className="main-content">
+          <main id="main-content" className="main-content" tabIndex={-1}>
             {route.parent === "today" && (
               <TodayView
                 profile={profile}
@@ -550,7 +550,7 @@ function AdminConsole({
   };
 
   return (
-    <main id="main-content" className="admin-shell">
+    <main id="main-content" className="admin-shell" tabIndex={-1}>
       <div className="admin-header">
         <div><p className="eyebrow">분리된 운영 영역</p><h1>자람법 운영자 콘솔</h1><span>부모 화면과 분리된 감사·검토·보안 도구입니다.</span></div>
         <button type="button" className="secondary-button" onClick={() => navigate("today")}>부모 화면으로</button>
