@@ -1514,3 +1514,90 @@ h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Workflow artifact detail — renders the backend's structured outputs (draft bodies,
+   refund calculations, rights, supports) instead of only their counts. */
+.artifact-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.artifact-block h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.brief-meta {
+  font-size: 0.82rem;
+  color: var(--info);
+}
+.draft-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 0.6rem 0.8rem;
+}
+.draft-card > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.draft-card > summary svg { width: 1rem; height: 1rem; }
+.draft-body {
+  margin: 0.7rem 0 0;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.draft-actions { margin-top: 0.6rem; }
+.draft-actions ol { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.calc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brand);
+  background: var(--brand-soft);
+}
+.calc-card.calc-incomplete {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+.calc-card strong { font-size: 1rem; }
+.calc-note { font-size: 0.78rem; color: var(--info); }
+.safety-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.6rem 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+}
+.safety-callout strong { display: block; }
+.safety-callout span { font-size: 0.85rem; }
+.case-fields {
+  margin: 0.4rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+.case-fields legend {
+  padding: 0 0.35rem;
+  font-size: 0.82rem;
+  color: var(--info);
+}
+.draft-block { display: flex; flex-direction: column; gap: 0.3rem; }

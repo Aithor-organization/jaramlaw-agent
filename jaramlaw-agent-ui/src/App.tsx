@@ -1,5 +1,6 @@
 import {
   FormEvent,
+  Fragment,
   KeyboardEvent,
   Suspense,
   lazy,
@@ -33,7 +34,14 @@ import {
   UserCheck,
 } from "lucide-react";
 import { apiFetch, getOperatorToken, readApiError, setOperatorToken } from "./api";
-import type { ConsultationSession, HealthStatus } from "./types";
+import type {
+  CalculationBreakdown,
+  CaseData,
+  ConsultationSession,
+  DraftDocument,
+  HealthStatus,
+  WorkflowReport,
+} from "./types";
 
 const DocumentSummarizer = lazy(() => import("./components/DocumentSummarizer").then((module) => ({ default: module.DocumentSummarizer })));
 const LawExplorer = lazy(() => import("./components/LawExplorer").then((module) => ({ default: module.LawExplorer })));
@@ -69,6 +77,13 @@ const demoPrompts = [
   { label: "어린이집 사고", text: "아이 하원 후 멍을 발견했습니다. 어린이집에서 사고 경위와 CCTV 열람 절차 안내를 미루고 있습니다." },
   { label: "육아휴직", text: "회사원이며 출산전후휴가와 육아휴직 신청 시기, 회사가 거부할 때 확인할 절차를 알고 싶습니다." },
 ];
+
+/** Mirrors the server's inferScenarioType (server.ts) so the form can prompt for the
+ * facts a scenario needs. Kept deliberately narrow: only academy_refund currently drives
+ * a structured calculation (the refund figure), so only it asks for structured input. */
+function inferScenario(text: string): "academy_refund" | "general" {
+  return /학원|환불|교습|수강료|선결제/.test(text) ? "academy_refund" : "general";
+}
 
 function parseRoute(): { parent: ParentTab; admin: AdminTab | null } {
   const value = window.location.hash.replace(/^#\/?/, "");
@@ -107,6 +122,7 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState<ConsultationSession | null>(null);
   const [historyRestricted, setHistoryRestricted] = useState(false);
   const [query, setQuery] = useState("");
+  const [caseData, setCaseData] = useState<CaseData>({});
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("상황을 입력하면 근거와 다음 행동을 분리해 정리합니다.");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -156,6 +172,15 @@ export default function App() {
     setSending(true);
     setNotice("입력 보호, 근거 확인, 답변 검증을 순서대로 진행하고 있습니다.");
     try {
+      // Only forward facts the user actually entered — an empty case_data is dropped so
+      // the backend's "don't invent missing facts" contract is preserved. Also gate on the
+      // current query still being a refund scenario: otherwise a leftover caseData from an
+      // earlier refund consult would silently drive a later, unrelated question.
+      const enteredCase = inferScenario(query.trim()) === "academy_refund"
+        ? Object.fromEntries(
+            Object.entries(caseData).filter(([, v]) => typeof v === "number" && Number.isFinite(v)),
+          )
+        : {};
       const response = await fetch("/api/consult", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,6 +194,7 @@ export default function App() {
             children: profile.birthMonth ? [{ birth_date: `${profile.birthMonth}-01` }] : [],
             parents: [{ role: "caregiver", household_type: profile.household }],
             flags: [profile.household],
+            ...(Object.keys(enteredCase).length ? { case_data: enteredCase } : {}),
           },
         }),
       });
@@ -178,6 +204,7 @@ export default function App() {
       setSelectedSession(session);
       setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
       setQuery("");
+      setCaseData({}); // don't let this run's facts leak into the next consultation
       setNotice(payload.failover
         ? "실시간 상담 엔진 대신 앱에 포함된 기준 자료로 정리했습니다. 공식 출처를 다시 확인하세요."
         : "상담 정리가 완료되었습니다. 근거와 다음 행동을 확인하세요.");
@@ -277,6 +304,8 @@ export default function App() {
                 setSelectedSession={setSelectedSession}
                 query={query}
                 setQuery={setQuery}
+                caseData={caseData}
+                setCaseData={setCaseData}
                 sending={sending}
                 notice={notice}
                 onSubmit={sendConsultation}
@@ -382,6 +411,63 @@ function TodayView({
   );
 }
 
+/** Fields the academy-refund calculation needs. Shown only when the query looks like a
+ * refund case; leaving them blank is fine — the backend reports which facts are missing
+ * rather than guessing, and the UI now surfaces that too. */
+function AcademyRefundFields({ caseData, setCaseData, disabled }: {
+  caseData: CaseData;
+  setCaseData: (data: CaseData) => void;
+  disabled: boolean;
+}) {
+  const fields: Array<{ key: keyof CaseData; label: string }> = [
+    { key: "total_paid_krw", label: "총 결제액 (원)" },
+    { key: "total_days", label: "총 수강일수 (일)" },
+    { key: "days_used", label: "이용한 일수 (일)" },
+    // Collected because the draft body interpolates it as "결제금액 … (N개월분)";
+    // without it the backend renders a malformed "(개월분)".
+    { key: "months_paid", label: "결제 개월 수 (개월)" },
+    { key: "monthly_fee_krw", label: "월 수강료 (원, 선택)" },
+  ];
+  const update = (key: keyof CaseData, raw: string) => {
+    const next = { ...caseData };
+    if (raw.trim() === "") delete next[key];
+    else next[key] = Number(raw);
+    setCaseData(next);
+  };
+  // Days used cannot exceed the course length; the backend would clamp remaining days to
+  // zero and emit a misleading "0원" refund, so flag it instead of silently submitting.
+  const daysInconsistent =
+    typeof caseData.days_used === "number" &&
+    typeof caseData.total_days === "number" &&
+    caseData.days_used > caseData.total_days;
+  return (
+    <fieldset className="case-fields">
+      <legend>환불 계산에 필요한 사실 (입력 시 정확한 금액을 계산합니다)</legend>
+      <div className="form-grid">
+        {fields.map(({ key, label }) => (
+          <div key={String(key)}>
+            <label className="field-label" htmlFor={`case-${String(key)}`}>{label}</label>
+            <input
+              id={`case-${String(key)}`}
+              type="number"
+              inputMode="numeric"
+              min="0"
+              disabled={disabled}
+              value={typeof caseData[key] === "number" ? String(caseData[key]) : ""}
+              onChange={(event) => update(key, event.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+      {daysInconsistent && (
+        <p className="case-warning" role="alert">
+          이용한 일수가 총 수강일수보다 많습니다. 값을 다시 확인하세요.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function ConsultView({
   profileReady,
   familyStage,
@@ -391,6 +477,8 @@ function ConsultView({
   setSelectedSession,
   query,
   setQuery,
+  caseData,
+  setCaseData,
   sending,
   notice,
   onSubmit,
@@ -403,10 +491,13 @@ function ConsultView({
   setSelectedSession: (session: ConsultationSession) => void;
   query: string;
   setQuery: (query: string) => void;
+  caseData: CaseData;
+  setCaseData: (data: CaseData) => void;
   sending: boolean;
   notice: string;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const scenario = inferScenario(query);
   return (
     <section id="panel-consult" role="tabpanel" aria-labelledby="tab-consult" className="consult-layout">
       <aside className="consult-sidebar">
@@ -421,6 +512,7 @@ function ConsultView({
           </div>
           <label className="field-label" htmlFor="consult-query">사실관계와 궁금한 점</label>
           <textarea id="consult-query" value={query} onChange={(event) => setQuery(event.target.value)} disabled={sending} placeholder="날짜, 기관, 금액, 상대방 답변을 사실대로 적어주세요. 이름과 정확한 주소는 제외하세요." />
+          {scenario === "academy_refund" && <AcademyRefundFields caseData={caseData} setCaseData={setCaseData} disabled={sending} />}
           <button className="primary-button" type="submit" disabled={sending || !query.trim()}>
             {sending ? <Loader2 className="spin" aria-hidden="true" /> : <Play aria-hidden="true" />}{sending ? "검토 중" : "근거와 다음 행동 정리"}
           </button>
@@ -478,26 +570,157 @@ function ConsultationResult({ session }: { session: ConsultationSession }) {
   );
 }
 
+const KRW = new Intl.NumberFormat("ko-KR");
+function formatKrw(value: unknown): string | null {
+  return typeof value === "number" && Number.isFinite(value) ? `${KRW.format(value)}원` : null;
+}
+
+/** Refund/settlement calculation. The backend computes it exactly (e.g. 641,667원); this
+ * renders the figure and its formula, or explains which facts are missing so the user
+ * knows the number was withheld for a reason rather than lost. */
+function CalculationCard({ calc }: { calc: CalculationBreakdown }) {
+  if (calc.status === "insufficient_facts") {
+    const missingLabels: Record<string, string> = {
+      total_paid_krw: "총 결제액",
+      total_days: "총 수강일수",
+      days_used: "이용 일수",
+      monthly_fee_krw: "월 수강료",
+    };
+    const missing = (calc.missing ?? []).map((k) => missingLabels[k] ?? k);
+    return (
+      <div className="calc-card calc-incomplete">
+        <strong>정산 금액 미산정</strong>
+        <span>{missing.length ? `${missing.join(", ")} 정보가 있으면 정확한 금액을 계산합니다.` : "계산에 필요한 사실관계가 부족합니다."}</span>
+      </div>
+    );
+  }
+  const refund = formatKrw(calc.refund_krw);
+  if (!refund) return null;
+  return (
+    <div className="calc-card">
+      <strong>예상 정산 금액 {refund}</strong>
+      {typeof calc.remaining_days === "number" && typeof calc.total_days === "number" && (
+        <span>총 {formatKrw(calc.total_paid_krw)} 중 잔여 {calc.remaining_days}/{calc.total_days}일 기준</span>
+      )}
+      <span className="calc-note">근거 계산식으로 산출된 참고값입니다. 실제 반환액은 공식 기준으로 재확인하세요.</span>
+    </div>
+  );
+}
+
+function DraftCard({ draft }: { draft: DraftDocument }) {
+  return (
+    <div className="draft-block">
+      {/* The calculation (the refund figure) stays outside the collapsible so the key
+          number is always visible; only the long document body is behind the summary. */}
+      {draft.calculation_breakdown && <CalculationCard calc={draft.calculation_breakdown} />}
+      <details className="draft-card">
+        <summary><FileText aria-hidden="true" /> {draft.title}</summary>
+        {draft.body_markdown && <pre className="draft-body">{draft.body_markdown}</pre>}
+        {!!draft.next_actions?.length && (
+          <div className="draft-actions">
+            <strong>다음 행동</strong>
+            <ol>{draft.next_actions.map((action, i) => <li key={i}>{action}</li>)}</ol>
+          </div>
+        )}
+      </details>
+    </div>
+  );
+}
+
 function WorkflowSummary({ session }: { session: ConsultationSession }) {
-  const report = asRecord(session.workflowReport);
-  const supports = asArray(report.support_matches);
-  const rights = asArray(report.rights_cards);
-  const drafts = asArray(report.draft_documents);
-  const verifier = asRecord(report.verifier_results);
+  const report: WorkflowReport = session.workflowReport ?? {};
+  const supports = report.support_matches ?? [];
+  const rights = report.rights_cards ?? [];
+  const drafts = report.draft_documents ?? [];
+  const events = report.calendar?.events ?? [];
+  const verifier = report.verifier_results ?? {};
+  const safety = report.safety_routing;
   return (
     <section className="panel workflow-summary">
       <div className="section-title"><div><p className="eyebrow">근거와 산출물</p><h2>확인 결과</h2></div><span className="status-badge tone-neutral">{session.auditLogId || "감사 ID 없음"}</span></div>
+
+      {safety?.triggered && (
+        <div className="safety-callout" role="alert">
+          <AlertCircle aria-hidden="true" />
+          <div>
+            <strong>안전 신호 감지 — 법령·문서 생성을 중단했습니다.</strong>
+            {safety.contact && <span>먼저 연락하세요: {safety.contact}</span>}
+          </div>
+        </div>
+      )}
+
       <div className="metric-grid">
         <Metric icon={BookOpen} label="법령" value={session.recommendedLaws.length} />
         <Metric icon={CheckCircle2} label="권리 안내" value={rights.length} />
         <Metric icon={FileText} label="문서 초안" value={drafts.length} />
         <Metric icon={CalendarClock} label="지원 제도" value={supports.length} />
       </div>
+
+      {!!drafts.length && (
+        <div className="artifact-block">
+          <h3>문서 초안</h3>
+          {drafts.map((draft, i) => <Fragment key={draft.doc_id ?? i}><DraftCard draft={draft} /></Fragment>)}
+        </div>
+      )}
+
+      {!!supports.length && (
+        <div className="artifact-block">
+          <h3>지원 제도</h3>
+          <div className="brief-list">
+            {supports.map((support, i) => (
+              <div key={support.support_id ?? i}>
+                {/* amount_krw is 0 for variable-value benefits ("20일간 통상임금 100%" etc.);
+                    show the descriptive amount there instead of a misleading "0원". */}
+                <strong>{support.name}{support.amount_krw && support.amount_krw > 0 ? ` · ${formatKrw(support.amount_krw)}` : support.amount_description ? ` · ${support.amount_description}` : ""}</strong>
+                <span>{support.condition_summary ?? ""}</span>
+                <span className="brief-meta">
+                  {support.application_channel && `신청: ${support.application_channel}`}
+                  {typeof support.deadline_days_left === "number" && support.deadline_days_left >= 0 &&
+                    (support.deadline_days_left === 0 ? " · 오늘 마감" : ` · D-${support.deadline_days_left}`)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!!rights.length && (
+        <div className="artifact-block">
+          <h3>권리 안내</h3>
+          <div className="brief-list">
+            {rights.map((card, i) => (
+              <div key={card.card_id ?? i}>
+                <strong>{card.title}</strong>
+                {card.holder && <span>대상: {card.holder}</span>}
+                {card.denial?.report_channel && <span className="brief-meta">신고·대응: {card.denial.report_channel}</span>}
+                {card.example_denial && <span className="brief-meta">예시: {card.example_denial}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!!events.length && (
+        <div className="artifact-block">
+          <h3>법령 캘린더</h3>
+          <div className="brief-list">
+            {events.slice(0, 6).map((event, i) => (
+              <div key={i}>
+                <strong>{event.title}</strong>
+                {event.scheduled_date && <span className="brief-meta">{event.scheduled_date}</span>}
+              </div>
+            ))}
+          </div>
+          {report.calendar?.ical_export && <p className="empty-copy">일정 {events.length}건 — iCal 내보내기 가능</p>}
+        </div>
+      )}
+
       <h3>추천 법령</h3>
       <div className="brief-list">
         {session.recommendedLaws.slice(0, 4).map((law) => <div key={law.id}><strong>{law.title}</strong><span>{law.summary}</span></div>)}
         {!session.recommendedLaws.length && <p className="empty-copy">연결된 법령이 없습니다.</p>}
       </div>
+
       <div className="verification-receipt">
         <ShieldCheck aria-hidden="true" />
         <div><strong>검증 영수증</strong><span>확인 {Number(verifier.verified_count ?? 0)} · 부분 확인 {Number(verifier.partial_count ?? 0)} · 추가 검토 {Number(verifier.unverifiable_count ?? 0)}</span></div>
