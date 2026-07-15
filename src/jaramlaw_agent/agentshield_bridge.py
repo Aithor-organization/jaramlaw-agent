@@ -404,31 +404,9 @@ class OutputVerdict:
         return out
 
 
-# AgentShield의 절대단정 탐지는 영어 표현("100% guaranteed") 위주라, 한국 부모가
-# 실제로 읽을 한글 확언을 놓친다. 결정론 계층에서 함께 잡는다. 법적 의무 서술
-# ("사용자는 반드시 휴가를 주어야 한다")까지 오탐하지 않도록, 확실성 부사 뒤에
-# **사용자에게 유리한 결과 동사**(승소·환불·합격 등)가 붙는 경우만 매칭한다.
-_KO_ABSOLUTE_CLAIM_RES = (
-    re.compile(r"(?:100|백)\s*(?:%|퍼센트)\s*(?:보장|안전|승소|성공|합법|환불|해결|당첨|확실|완치)"),
-    re.compile(r"절대(?:적으로)?\s*(?:안전|실패\s*하지\s*않|문제\s*(?:가)?\s*없|틀리지\s*않|걱정\s*(?:할\s*필요\s*)?없|안\s*(?:걸리|잡히|집니))"),
-    re.compile(r"무조건\s*(?:승소|이깁|이길|이기|환불|받으실|받을\s*수\s*있|가능|해결|합격|성공)"),
-    re.compile(r"반드시\s*(?:승소|이깁|이길|이기실|환불\s*받|받으실\s*수\s*있|성공|합격)"),
-    re.compile(r"틀림없이\s*(?:승소|이깁|받으실|환불|성공|합격)"),
-    re.compile(r"확실(?:하게|히)\s*(?:승소|이깁|환불|보장|합격)"),
-)
-
-
-def _detect_korean_absolute_claims(text: str) -> list[str]:
-    """한글 근거 없는 절대 단정("100% 승소", "무조건 환불")을 찾아 매칭 구절을 반환."""
-    found: list[str] = []
-    for pattern in _KO_ABSOLUTE_CLAIM_RES:
-        for match in pattern.finditer(text):
-            phrase = match.group(0).strip()
-            if phrase not in found:
-                found.append(phrase)
-    return found
-
-
+# 한글 절대단정 탐지("100% 안전"·"반드시 승소"·"무조건 환불")는 AgentShield 상류
+# (runtime.FORBIDDEN_CLAIM_RE)로 승격됨 — guard.inspect_output()가 직접
+# unsupported_claim으로 반환하므로 여기서 로컬 재탐지하지 않는다.
 def inspect_output_text(text: str) -> OutputVerdict:
     """LLM 답변을 부모 화면에 내보내기 전에 검사.
 
@@ -448,11 +426,6 @@ def inspect_output_text(text: str) -> OutputVerdict:
     sanitized = _unseal_dates(decision.sanitized or sealed_text, sealed)
     reasons = list(decision.reasons)
     claims = [r.split(":", 1)[1] for r in reasons if r.startswith("unsupported_claim:")]
-
-    for phrase in _detect_korean_absolute_claims(sanitized):
-        if phrase not in claims:
-            claims.append(phrase)
-            reasons.append(f"unsupported_claim:{phrase}")
 
     return OutputVerdict(
         allowed=bool(decision.allowed),
