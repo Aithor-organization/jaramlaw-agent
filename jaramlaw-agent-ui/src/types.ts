@@ -37,6 +37,95 @@ export interface ExpertFeedback {
   editedLaws?: string[];
 }
 
+/**
+ * Structured artifacts the Python workflow returns inside `workflowReport`. Field names
+ * mirror the backend dataclasses exactly (jaramlaw_agent/models.py) so the UI can render
+ * the actual content — refund figures, draft bodies, rights — instead of only counts.
+ * Every field is optional: the backend omits what a given scenario does not produce, and
+ * a `safety`-routed run returns empty arrays by design.
+ */
+export interface LegalBasis {
+  law?: string;
+  article?: string;
+  effective_date?: string;
+  source_url?: string;
+}
+
+/** Present only when the backend could compute a refund; `insufficient_facts` otherwise. */
+export interface CalculationBreakdown {
+  status?: 'insufficient_facts';
+  missing?: string[];
+  total_paid_krw?: number;
+  days_used?: number;
+  total_days?: number;
+  remaining_days?: number;
+  refund_krw?: number;
+  formula?: string;
+}
+
+export interface DraftDocument {
+  doc_id?: string;
+  title: string;
+  kind?: string;
+  body_markdown?: string;
+  legal_basis?: LegalBasis[];
+  next_actions?: string[];
+  calculation_breakdown?: CalculationBreakdown;
+}
+
+/** How a right is typically denied and the recourse. The backend returns this as an
+ * object (not a string) — rendering it directly was React error #31. */
+export interface RightsDenial {
+  violation?: string;
+  penalty_summary?: string;
+  report_channel?: string;
+}
+
+export interface RightsCard {
+  card_id?: string;
+  title: string;
+  holder?: string;
+  legal_basis?: LegalBasis;
+  denial?: RightsDenial;
+  example_denial?: string;
+}
+
+export interface SupportMatch {
+  support_id?: string;
+  name: string;
+  amount_krw?: number;
+  amount_description?: string;
+  condition_summary?: string;
+  application_channel?: string;
+  deadline_days_left?: number;
+  deadline_kind?: string;
+}
+
+export interface CalendarEvent {
+  kind?: string;
+  title: string;
+  scheduled_date?: string;
+  legal_basis?: LegalBasis;
+  notes?: string;
+}
+
+export interface WorkflowReport {
+  matched_laws?: unknown[];
+  support_matches?: SupportMatch[];
+  rights_cards?: RightsCard[];
+  draft_documents?: DraftDocument[];
+  calendar?: { events?: CalendarEvent[]; ical_export?: string };
+  verifier_results?: {
+    verified_count?: number;
+    partial_count?: number;
+    unverifiable_count?: number;
+    verified_ratio?: number;
+  };
+  safety_routing?: { triggered?: boolean; category?: string; contact?: string };
+  ai_answer?: { mode?: string };
+  [key: string]: unknown;
+}
+
 export interface ConsultationSession {
   id: string;
   title: string;
@@ -49,13 +138,23 @@ export interface ConsultationSession {
   securityLevel: 'Standard' | 'AES-256-GCM';
   synced: boolean;
   auditLogId?: string;
-  workflowReport?: Record<string, unknown>;
+  workflowReport?: WorkflowReport;
   integration?: {
     backend: 'python-engine' | 'local-rule-engine' | 'local-seed' | string;
     connected: boolean;
     engine?: string;
     fallback_reason?: string;
   };
+}
+
+/** Scenario-specific facts the user can supply so the backend can compute concrete results. */
+export interface CaseData {
+  monthly_fee_krw?: number;
+  months_paid?: number;
+  total_paid_krw?: number;
+  days_used?: number;
+  total_days?: number;
+  [key: string]: unknown;
 }
 
 export interface DocSummary {
