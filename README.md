@@ -223,9 +223,21 @@ npm install
 npm run dev        # 기본 127.0.0.1 loopback (외부 노출 시 JARAMLAW_API_TOKEN 필수)
 ```
 
-부모용 상담 입력·이력·검토 결과·전문가 확인 패널을 한 화면에 배치했고, Python 워크플로우와 운영 계층 상태를 함께 표시한다.
+브라우저에서 `http://127.0.0.1:3000`을 연다(`PORT`를 지정하면 해당 포트 사용). 첫 화면은 운영 지표가 아니라 부모가 지금 확인할 권리·지원·기한에 집중한다.
 
-![JaramLaw Agent 기본 UI](docs/assets/jaramlaw-ui-basic.png)
+| 화면 | 역할 |
+|---|---|
+| **오늘** | 아이 출생 연월·지역·가족 상황으로 라이프스테이지와 확인할 지원·기한의 범위를 좁힌다. 이름과 정확한 주소는 받지 않으며 입력값은 브라우저 메모리에만 둔다. |
+| **상담** | 사건의 날짜·기관·금액·상대방 답변을 입력하면 근거, 검증 상태, 다음 행동을 분리해 보여준다. Python 워크플로우를 사용할 수 없으면 내장 기준 자료라는 사실을 결과에 표시한다. |
+| **서류** | 개인정보를 제거한 `.txt`·`.md` 문서(최대 1MB)에서 쟁점과 다음 행동을 정리한다. Word/OCR 처리를 지원하는 것처럼 표시하지 않는다. |
+| **법령** | 앱에 포함된 기준 법령을 검색하고 국가법령정보센터 링크를 제공한다. 시드 자료는 실시간 최신성을 보장하지 않는다고 명시한다. |
+| **운영자** | `#admin/*` 아래에서 워크플로우 상태, 전문가 검토, 보안 검증을 제공한다. 외부 바인딩에서는 Bearer 토큰 인증이 필요하다. |
+
+신뢰 경계도 UI에 그대로 드러낸다. 분쟁 위험은 통계적 승소·분쟁 확률이 아닌 **정성적 검토 우선순위**로 표시하며, 보안 샌드박스는 실제 AES-256-GCM 인증 암호화를 사용한다. `JARAMLAW_DEMO_ENCRYPTION_KEY`가 없으면 키는 서버 프로세스 수명 동안만 유지된다.
+
+![부모의 오늘 할 일과 가족 프로필을 우선하는 JaramLaw UI](docs/assets/jaramlaw-ui-basic.png)
+
+UI 설계 토큰과 금지 패턴은 [`jaramlaw-agent-ui/brand-spec.md`](jaramlaw-agent-ui/brand-spec.md), 브라우저 회귀 검사는 [`jaramlaw-agent-ui/tests/ui.spec.ts`](jaramlaw-agent-ui/tests/ui.spec.ts)에 있다.
 
 ---
 
@@ -276,6 +288,10 @@ jaramlaw-agent/
 │   └── cli.py                   # 진입점 (doctor/demo/search-law/fetch-article/ask)
 ├── ops/agentloop/               # 운영 게이트 정책 (SLO/임계값/baseline)
 ├── scripts/                     # AgentLoop 관측 + 게이트 러너
+├── jaramlaw-agent-ui/           # 부모 UI + 분리된 운영자 콘솔 + Express 브리지
+│   ├── src/                     # React 화면, 컴포넌트, 디자인 토큰
+│   ├── tests/                   # Playwright 핵심 흐름·접근성·모바일 검사
+│   └── server.ts                # UI API, Python 워크플로우 브리지, 인증 경계
 ├── tests/                       # 157 tests
 ├── .github/workflows/           # CI (agentloop-gate)
 └── docs/                        # 아키텍처 + 운영 준비도 + SKILLs 통합
@@ -318,6 +334,11 @@ PYTHONPATH=src python3 -m jaramlaw_agent demo --scenario C
 ```bash
 PYTHONPATH=src python3 -m pytest tests/ -q
 # 157 tests
+
+cd jaramlaw-agent-ui
+npm run lint
+npm run build
+npm run test:e2e
 ```
 
 주요 회귀 차단:
@@ -328,6 +349,7 @@ PYTHONPATH=src python3 -m pytest tests/ -q
 - `test_learning_loop.py` — 학습 폐루프 (plan → observe → 되먹임)
 - `test_agentloop_gate.py` — 운영 게이트 계약
 - `test_operational_governance.py` — 모델 라우팅·예산·메모리·독립 검증
+- `jaramlaw-agent-ui/tests/ui.spec.ts` — 부모·운영자 핵심 흐름, AES-GCM 왕복, 키보드 탭, axe 접근성, 모바일 가로 넘침
 
 ---
 
