@@ -159,6 +159,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               type="file"
               accept=".txt,.doc,.docx"
               onChange={handleFileSelect}
+              aria-label={isEn ? "Upload document file (.txt/.doc/.docx)" : "문서 파일 첨부 (.txt/.doc/.docx)"}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
             <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
@@ -201,6 +202,7 @@ export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language
               rows={4}
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
+              aria-label={isEn ? "Paste agreement text directly" : "약정 특약 직접 입력"}
               placeholder={isEn ? "Paste contract texts here..." : "제3조... 갑은 을에게 손해배상액으로..."}
             />
           </div>

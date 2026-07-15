@@ -113,7 +113,15 @@ export const DisputeChart: React.FC<DisputeChartProps> = ({ analysis, language }
           <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
             {isEn ? "1. Litigious Risk Topology" : "1. 잠재 위험 위상 위상도 (Radar)"}
           </span>
-          <div className="w-full h-[220px]">
+          <div
+            className="w-full h-[220px]"
+            role="img"
+            aria-label={
+              isEn
+                ? `Litigious risk radar chart. Overall dispute risk ${analysis.overallScore}%.`
+                : `분쟁 리스크 위상 레이더 차트. 종합 분쟁 리스크 ${analysis.overallScore}%.`
+            }
+          >
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
                 <PolarGrid stroke="#e2e8f0" />

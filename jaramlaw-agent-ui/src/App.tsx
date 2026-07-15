@@ -246,6 +246,10 @@ export default function App() {
               <button
                 key={tab.key}
                 type="button"
+                role="tab"
+                id={`tab-${tab.key}`}
+                aria-selected={activeTab === tab.key}
+                aria-controls={`panel-${tab.key}`}
                 className={`workspace-tab ${activeTab === tab.key ? "workspace-tab-active" : ""}`}
                 onClick={() => setActiveTab(tab.key)}
               >
@@ -264,7 +268,7 @@ export default function App() {
         )}
 
         {activeTab === "consult" ? (
-          <section className="consult-grid">
+          <section className="consult-grid" role="tabpanel" id="panel-consult" aria-labelledby="tab-consult">
             <aside className="side-stack">
               <section className="panel">
                 <div className="section-title">
@@ -426,7 +430,12 @@ export default function App() {
             </section>
           </section>
         ) : (
-          <section className="workspace-main">
+          <section
+            className="workspace-main"
+            role="tabpanel"
+            id={`panel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+          >
             {activeTab === "documents" && <DocumentSummarizer language={language} />}
             {activeTab === "security" && <SecurityConsole language={language} />}
             {activeTab === "laws" && <LawExplorer language={language} />}
