@@ -17,6 +17,7 @@ export interface LawItem {
 }
 
 export interface RiskAnalysis {
+  /** Internal triage signal, not a statistical probability. */
   overallScore: number; // 0 to 100
   contractualAmbiguity: number; // 0 to 100
   evidenceStrength: number; // 0 to 100
@@ -83,18 +84,13 @@ export interface CryptoLog {
 export interface HealthStatus {
   status: string;
   app: string;
-  parent_root: string;
   python_bridge: {
     enabled: boolean;
-    python_bin: string;
-    source_path: string;
     source_present: boolean;
-    workflow_path: string;
     workflow_present: boolean;
     timeout_ms: number;
   };
   audit: {
-    path: string;
     present: boolean;
     recent_count: number;
   };
@@ -107,7 +103,6 @@ export interface HealthStatus {
     team_topology_present: boolean;
     model_routing_workflow_present: boolean;
     brain_workflow_present: boolean;
-    trace_path: string;
     trace_present: boolean;
     trace_recent_count: number;
   };

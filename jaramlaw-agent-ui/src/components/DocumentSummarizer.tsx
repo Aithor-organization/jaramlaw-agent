@@ -1,380 +1,199 @@
-import React, { useState, useEffect } from "react";
-import { FileText, Upload, RefreshCw, AlertTriangle, ShieldCheck, CheckSquare, Plus } from "lucide-react";
-import { DocSummary } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Upload } from "lucide-react";
+import type { DocSummary } from "../types";
 
-interface DocumentSummarizerProps {
-  language: "ko" | "en";
+const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+const ACCEPTED_EXTENSIONS = [".txt", ".md"];
+
+const TEMPLATES = [
+  {
+    title: "학원 수강료 환불 요청 초안.txt",
+    text: "수신: 학원 담당자\n제목: 수강료 중도 해지 및 잔여 교습비 정산 요청\n\n계약일, 결제 금액, 실제 수강 기간과 해지 요청일을 아래와 같이 정리합니다. 관련 법령의 반환 기준에 따라 정산 내역과 반환 예정일을 서면으로 회신해 주세요.",
+  },
+  {
+    title: "어린이집 사고기록 요청 초안.txt",
+    text: "수신: 어린이집 원장\n제목: 안전사고 경위 및 관련 기록 확인 요청\n\n보호자는 사고 발생 일시, 장소, 당시 담당자, 초기 조치와 보호자 통지 경위를 확인하고자 합니다. 가능한 범위에서 사고보고서와 영상 열람 절차를 안내해 주세요.",
+  },
+];
+
+function fileExtension(name: string): string {
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index).toLowerCase() : "";
 }
 
-export const DocumentSummarizer: React.FC<DocumentSummarizerProps> = ({ language }) => {
-  const isEn = language === "en";
-
-  const [customText, setCustomText] = useState("");
-  const [docTitle, setDocTitle] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
+export function DocumentSummarizer() {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
   const [documents, setDocuments] = useState<DocSummary[]>([]);
-  const [activeDoc, setActiveDoc] = useState<DocSummary | null>(null);
+  const [activeId, setActiveId] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [status, setStatus] = useState("TXT 또는 Markdown 문서를 선택하거나 내용을 직접 붙여 넣으세요.");
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  // Preloaded templates for fast user testing
-  const TEMPLATES = [
-    {
-      title: isEn ? "Private Academy Tuition Refund Request.txt" : "학원 수강료 중도 해지 환불 요청 서한.txt",
-      text: `[학원 과목 교습비 중도 해지 청구 통보 서한]
-수신: 마포구 스파르타 영어학원 원장님
-발신: 학부모 김지원 (수강생: 김하람 / 초1)
-제목: 학원 수강료 중도 해지 및 잔여 교습비 환불 청구
-
-본 수강생은 귀 학원의 영어 종합 과정에 대해 3개월분 총 1,050,000원을 선납 기결제하였습니다. 개인 사정상 1개월 4일이 경과한 시점에서 유선으로 중도 해지를 요청하였으나, 귀 학원은 '선결제 할인 및 내부 규정상 3개월 미만은 환불 불가'를 이유로 정산을 거절하고 있습니다.
-학원의 설립·운영 및 과외교습에 관한 법률 시행령 제18조 제2항 [별표 4]에 정한 바에 의하여, 1개월 초과 계약의 중도 해지 시 경과하지 아니한 부분에 대한 교습비를 일할 적정 부과 후 즉시 반환할 것을 청구합니다. 정당한 사유 없는 환불 지연 시 교육지원청 민원 및 소비자원 고발 조치하겠음을 알립니다.`
-    },
-    {
-      title: isEn ? "Care Center CCTV Inspection Request.txt" : "어린이집 안전사고 원인 조사 및 CCTV 열람 요청서.txt",
-      text: `[어린이집 폐쇄회로 텔레비전 CCTV 열람 청구서]
-수신: 마포 자람 어린이집 원장
-신청인: 아동 보호자 김지원 (아동: 김나율 / 24개월)
-열람 사유: 영유아 안전 확인 및 사고 경위 파악
-
-상기 아동은 지난 5월 20일 하원 후 이마에 직경 5cm 가량의 심각한 뇌진탕성 타박상 및 멍이 발견되었습니다. 어린이집 측은 '낮잠 시간 후 일어나다 미끄러진 단순 미경미 사고'라고 구두 알림장으로 소명하였으나, 사고 발생 상황에 관한 정밀 경위 및 교사의 보호 의무 소홀 여부 확인을 위해 CCTV 영상정보 열람을 신청합니다.
-영유아보육법 제15조의5 및 개인정보보호법 가이드라인에 의거하여, 보호자는 아동의 안전 확인을 목적으로 원내 CCTV 영상정보 열람을 정당히 요구할 수 있으며 원장은 이에 응하여야 합니다. 사생활 침해나 타 아동 노출의 핑계로 열람을 거부하거나 지연할 시 불법으로 처벌될 수 있음을 고지합니다.`
-    }
-  ];
-
-  const fetchDocs = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       const response = await fetch("/api/documents");
-      const d = await response.json();
-      if (d.status === "success") {
-        setDocuments(d.data);
-        if (d.data.length > 0 && !activeDoc) {
-          setActiveDoc(d.data[0]);
-        }
+      const payload = await response.json();
+      if (response.ok && payload.status === "success") {
+        setDocuments(payload.data);
+        setActiveId((current) => current || payload.data[0]?.id || "");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setStatus("이전에 분석한 문서 목록을 불러오지 못했습니다.");
     }
-  };
-
-  useEffect(() => {
-    fetchDocs();
   }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  useEffect(() => { void loadDocuments(); }, [loadDocuments]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      setDocTitle(file.name);
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCustomText(event.target.result as string);
-        }
-      };
-      reader.readAsText(file);
+  const readTextFile = (file: File) => {
+    if (!ACCEPTED_EXTENSIONS.includes(fileExtension(file.name))) {
+      setStatus("현재는 .txt와 .md 파일만 지원합니다. Word 문서는 텍스트로 내보낸 뒤 업로드하세요.");
+      return;
     }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      setDocTitle(file.name);
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCustomText(event.target.result as string);
-        }
-      };
-      reader.readAsText(file);
+    if (file.size > MAX_TEXT_FILE_BYTES) {
+      setStatus("파일이 1MB를 초과합니다. 필요한 부분만 텍스트로 정리해 주세요.");
+      return;
     }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTitle(file.name);
+      setContent(typeof reader.result === "string" ? reader.result : "");
+      setStatus(`${file.name}을 불러왔습니다. 분석 전 개인정보를 다시 확인하세요.`);
+    };
+    reader.onerror = () => setStatus("파일을 읽지 못했습니다.");
+    reader.readAsText(file, "utf-8");
   };
 
-  const selectTemplate = (index: number) => {
-    setDocTitle(TEMPLATES[index].title);
-    setCustomText(TEMPLATES[index].text);
-  };
-
-  const triggerAnalysis = async () => {
-    if (!customText) return;
+  const analyze = async () => {
+    if (!content.trim()) return;
     setAnalyzing(true);
-    
+    setStatus("문서에서 쟁점과 다음 행동을 정리하고 있습니다.");
     try {
-      const res = await fetch("/api/summarize", {
+      const response = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: docTitle || (isEn ? "Manual Upload Contract" : "신규 검토 합의서.txt"),
-          content: customText,
-          language: language
-        })
+        body: JSON.stringify({ title: title.trim() || "직접 입력 문서", content: content.trim() }),
       });
-      const data = await res.json();
-      if (data.status === "success") {
-        setDocuments((prev) => [data.data, ...prev]);
-        setActiveDoc(data.data);
-        setCustomText("");
-        setDocTitle("");
-      }
-    } catch (err) {
-      console.error("Analysis error", err);
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "success") throw new Error(payload.message || "문서 분석에 실패했습니다.");
+      setDocuments((current) => [payload.data, ...current.filter((item) => item.id !== payload.data.id)]);
+      setActiveId(payload.data.id);
+      setContent("");
+      setTitle("");
+      setStatus("문서 검토가 완료되었습니다. 결과는 법률 자문이 아닌 쟁점 정리입니다.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "문서 분석 중 오류가 발생했습니다.");
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900/30";
-    if (score >= 40) return "text-amber-700 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30";
-    return "text-red-700 bg-red-50 dark:bg-red-950/20 dark:border-red-900/30";
-  };
+  const active = documents.find((item) => item.id === activeId) || null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="legal-document-summarizer">
-      {/* Selection Left Grid */}
-      <div className="lg:col-span-5 space-y-6">
-        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-xs">
+    <section id="panel-documents" className="tool-layout" role="tabpanel" aria-labelledby="tab-documents">
+      <div className="panel tool-sidebar">
+        <div className="section-title">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <Upload className="w-4.5 h-4.5 text-blue-600" />
-              {isEn ? "Contract/Document Analyzer" : "신규 계약 보증서 분석/업로드"}
-            </h3>
-            <p className="text-[11px] text-slate-600 mt-0.5">
-              {isEn ? "Support drag-and-drop or select preloaded templates to discover toxic clauses" : "계약서 약정 텍스트를 드래그 앤 드롭하거나 서식을 기재해 불합리한 독소 조항을 수사하십시오."}
-            </p>
+            <p className="eyebrow">문서 정리</p>
+            <h1>내용에서 쟁점 찾기</h1>
           </div>
-
-          {/* Drag & Drop uploader area */}
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center hover:border-blue-500 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-all cursor-pointer relative"
-          >
-            <input
-              type="file"
-              accept=".txt,.doc,.docx"
-              onChange={handleFileSelect}
-              aria-label={isEn ? "Upload document file (.txt/.doc/.docx)" : "문서 파일 첨부 (.txt/.doc/.docx)"}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-            <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-              {docTitle || (isEn ? "Drop txt/doc file here or click" : "원 서식 파일 드래그 또는 수동 파일 첨부")}
-            </span>
-            <span className="text-[10px] text-slate-600 mt-1 block">
-              {isEn ? "Supports .txt up to 10MB" : "텍스트 및 영문/국문 로컬 파일 지원 (최대 10MB)"}
-            </span>
-          </div>
-
-          {/* Quick template pick list */}
-          <div className="space-y-2">
-            <span className="text-[10px] uppercase font-bold text-slate-600 block tracking-wider">
-              {isEn ? "Quick Selection Preloads" : "전문 예시 계약특약 간편 탐방"}
-            </span>
-            <div className="grid grid-cols-1 gap-2">
-              {TEMPLATES.map((tpl, i) => (
-                <button
-                  key={i}
-                  onClick={() => selectTemplate(i)}
-                  className="w-full text-left p-2.5 rounded-lg border border-slate-150 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900 text-xs transition cursor-pointer"
-                >
-                  <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-0.5 break-all">
-                    📄 {tpl.title}
-                  </span>
-                  <span className="text-[10px] text-slate-600 block truncate">{tpl.text}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Direct Text Pasting Area */}
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
-              {isEn ? "Paste Custom Agreement Copy Direct" : "약정 특약 수정 입력 (직접 작정)"}
-            </span>
-            <textarea
-              className="w-full bg-[#f8fafc] dark:bg-[#0b1329] border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-              rows={4}
-              value={customText}
-              onChange={(e) => setCustomText(e.target.value)}
-              aria-label={isEn ? "Paste agreement text directly" : "약정 특약 직접 입력"}
-              placeholder={isEn ? "Paste contract texts here..." : "제3조... 갑은 을에게 손해배상액으로..."}
-            />
-          </div>
-
-          <button
-            onClick={triggerAnalysis}
-            disabled={analyzing || !customText}
-            className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 hover:shadow-xs disabled:bg-slate-200 disabled:text-slate-700 disabled:border-slate-300 transition cursor-pointer"
-            id="run-analysis-button"
-          >
-            {analyzing ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                {isEn ? "Analyzing via Gemini AI..." : "Gemini AI 정밀 수집/독소 수사 대기..."}
-              </>
-            ) : (
-              <>
-                <FileText className="w-3.5 h-3.5" />
-                {isEn ? "RUN AI ANALYSIS SHEET" : "AI 독소 조항 완벽 해소 수사"}
-              </>
-            )}
-          </button>
+          <FileText aria-hidden="true" />
         </div>
 
-        {/* Saved Logs Sidebar list */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-3 uppercase tracking-wider">
-            {isEn ? "Historically Audited Invoices" : "분석 완료 서류 이력"}
-          </span>
-          <div className="space-y-2 h-48 overflow-y-auto pr-1">
-            {documents.length === 0 ? (
-              <p className="text-xs text-slate-600 text-center py-10">No document analyzed yet.</p>
-            ) : (
-              documents.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => setActiveDoc(doc)}
-                  className={`w-full text-left p-3.5 rounded-lg border transition-all cursor-pointer ${
-                    activeDoc?.id === doc.id
-                      ? "bg-slate-50 border-slate-350 dark:bg-slate-800 dark:border-slate-600 shadow-xs"
-                      : "border-slate-150 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-800/40"
-                  }`}
-                >
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block truncate">
-                    💼 {doc.title}
-                  </span>
-                  <div className="flex justify-between items-center text-[10px] text-slate-600 mt-1 font-mono">
-                    <span>{new Date(doc.date).toLocaleDateString()}</span>
-                    <span>{(doc.length / 1024).toFixed(2)} KB</span>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
+        <div
+          className="upload-zone"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+            if (file) readTextFile(file);
+          }}
+        >
+          <Upload aria-hidden="true" />
+          <strong>텍스트 파일을 놓거나 선택하세요</strong>
+          <span>.txt, .md · 최대 1MB</span>
+          <button type="button" className="secondary-button" onClick={() => fileInput.current?.click()}>파일 선택</button>
+          <input
+            ref={fileInput}
+            className="visually-hidden"
+            type="file"
+            accept=".txt,.md,text/plain,text/markdown"
+            aria-label="텍스트 문서 선택"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) readTextFile(file);
+              event.target.value = "";
+            }}
+          />
         </div>
-      </div>
 
-      {/* Analysis Output Sheet: Right Grid */}
-      <div className="lg:col-span-7">
-        {activeDoc ? (
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-6 shadow-xs">
-            {/* Active File Title Block */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
-              <div>
-                <span className="text-[10px] font-bold text-slate-600 font-mono uppercase tracking-wider block">
-                  {isEn ? "Audit Report Invoice" : "서명 특약 독소 조항 평가 진단서"}
-                </span>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-50 mt-0.5">
-                  📁 {activeDoc.title}
-                </h3>
-              </div>
-              <div className={`px-4 py-2 border rounded-xl flex items-center gap-1.5 font-bold ${getScoreColor(activeDoc.analysisScore || 60)}`}>
-                <span className="text-2xl font-mono">{activeDoc.analysisScore || 60}</span>
-                <div className="text-left font-sans">
-                  <span className="text-[9px] text-slate-600 block tracking-wide uppercase">Safety Score</span>
-                  <span className="text-[10px] block">
-                    {(activeDoc.analysisScore || 60) >= 70
-                      ? (isEn ? "Fair/Equal" : "권익 대칭")
-                      : (activeDoc.analysisScore || 60) >= 40
-                      ? (isEn ? "Moderate Risk" : "주의 필요")
-                      : (isEn ? "Toxic/Biased" : "독소 과다")}
-                  </span>
-                </div>
-              </div>
-            </div>
+        <div className="template-row" aria-label="문서 예시">
+          {TEMPLATES.map((template) => (
+            <button
+              type="button"
+              className="text-button"
+              key={template.title}
+              onClick={() => { setTitle(template.title); setContent(template.text); setStatus("개인정보가 없는 예시 문서를 불러왔습니다."); }}
+            >
+              {template.title.replace(".txt", "")}
+            </button>
+          ))}
+        </div>
 
-            {/* Overall summary section */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-300 flex items-center gap-1 border-b border-slate-100 dark:border-slate-800 pb-1.5 uppercase tracking-wide">
-                ⚖ {isEn ? "Senior AI Analysis Assessment" : "AI 변론 수석 소견"}
-              </span>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl">
-                {activeDoc.overallSummary}
-              </p>
-            </div>
+        <label className="field-label" htmlFor="document-title">문서 제목</label>
+        <input id="document-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: 학원 환불 요청서" />
 
-            {/* Core commitments */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-blue-800 dark:text-blue-400 flex items-center gap-1 uppercase tracking-wide">
-                <CheckSquare className="w-4 h-4" />
-                {isEn ? "Obligations and Core Understandings" : "약정상 명시된 상대방과의 의무 사항 (이행선언)"}
-              </span>
-              <ul className="grid grid-cols-1 gap-2">
-                {activeDoc.coreArguments.map((arg, idx) => (
-                  <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/10 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                    <span className="text-blue-700 font-bold text-xs">[{idx+1}]</span>
-                    <span className="leading-relaxed">{arg}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <label className="field-label" htmlFor="document-content">검토할 내용</label>
+        <textarea
+          id="document-content"
+          className="document-textarea"
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          placeholder="이름, 전화번호, 정확한 주소 등 불필요한 개인정보는 지우고 붙여 넣으세요."
+        />
 
-            {/* Critical Risks and loopholes */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-rose-800 dark:text-rose-400 flex items-center gap-1 uppercase tracking-wide">
-                <AlertTriangle className="w-4 h-4" />
-                {isEn ? "Detrimental Loopholes / Toxic Terms" : "합의 독소 리스크 및 불평등 독소 조항"}
-              </span>
-              <ul className="grid grid-cols-1 gap-2">
-                {activeDoc.criticalRisks.map((risk, idx) => (
-                  <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-rose-50/35 dark:bg-rose-950/5 p-2.5 rounded-lg border border-rose-100/50 dark:border-rose-900/20">
-                    <span className="text-rose-700 font-bold text-xs select-none">⚠️</span>
-                    <span className="leading-relaxed">{risk}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <button type="button" className="primary-button" disabled={!content.trim() || analyzing} onClick={analyze}>
+          {analyzing ? <Loader2 className="spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+          {analyzing ? "검토 중" : "쟁점 정리 시작"}
+        </button>
+        <p className="form-status" role="status" aria-live="polite">{status}</p>
 
-            {/* Alternate safe provisions */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/15 p-2 rounded-lg border border-emerald-100 dark:border-emerald-900/20 uppercase tracking-wide">
-                <ShieldCheck className="w-4.5 h-4.5" />
-                {isEn ? "Revised Mitigation Counter-Drafts" : "권익 보호 목적 안전 대안 조항 배합 제안"}
-              </span>
-              <ul className="grid grid-cols-1 gap-2">
-                {activeDoc.actionableSteps.map((step, idx) => (
-                  <li key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/20 p-2.5 rounded-lg border border-slate-150 dark:border-slate-800">
-                    <span className="text-emerald-700 font-bold font-mono">[{idx+1}]</span>
-                    <span className="leading-relaxed font-sans">{step}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Recommended regulations checklist */}
-            {activeDoc.lawChecklist && activeDoc.lawChecklist.length > 0 && (
-              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-150 dark:border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-2">
-                  🛡 {isEn ? "Direct Regulatory Precedents" : "대조 연계 민상법/하도급 관련 법령 준거"}
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {activeDoc.lawChecklist.map((law, idx) => (
-                    <span key={idx} className="bg-white dark:bg-slate-950 px-2.5 py-1 text-[10px] text-slate-600 dark:text-slate-300 rounded border border-slate-200/50 dark:border-slate-800/80 font-semibold shadow-sm">
-                      ⚖ {law}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="border border-slate-150 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950 p-12 text-center text-slate-600 flex flex-col justify-center items-center h-full">
-            <FileText className="w-12 h-12 text-slate-300 mb-2" />
-            <h4 className="font-bold text-slate-700 dark:text-slate-300">
-              {isEn ? "No Document Active" : "불러올 진단서가 없습니다."}
-            </h4>
-            <p className="text-xs text-slate-600 mt-1 max-w-sm">
-              {isEn ? "Please upload contract or choose templates on the left sidebar to generate detailed safety report" : "좌측 사이드바에서 약정을 불러오거나 파일을 투입해 정밀 진단을 발급하십시오."}
-            </p>
+        {documents.length > 0 && (
+          <div className="select-list compact" aria-label="분석한 문서">
+            {documents.map((document) => (
+              <button
+                type="button"
+                className={`select-row ${document.id === activeId ? "is-selected" : ""}`}
+                key={document.id}
+                onClick={() => setActiveId(document.id)}
+              >
+                <FileText aria-hidden="true" />
+                <span><strong>{document.title}</strong><small>{new Date(document.date).toLocaleDateString("ko-KR")}</small></span>
+              </button>
+            ))}
           </div>
         )}
       </div>
-    </div>
+
+      <article className="panel tool-detail" aria-live="polite">
+        {active ? (
+          <>
+            <div className="section-title">
+              <div><p className="eyebrow">검토 결과</p><h2>{active.title}</h2></div>
+              <span className="status-badge tone-good">정리 완료</span>
+            </div>
+            <section className="document-section"><h3>한눈에 보기</h3><p>{active.overallSummary}</p></section>
+            <section className="document-section"><h3>핵심 쟁점</h3><ul>{active.coreArguments.map((item) => <li key={item}>{item}</li>)}</ul></section>
+            <section className="document-section warning"><h3><AlertTriangle aria-hidden="true" /> 주의할 부분</h3><ul>{active.criticalRisks.map((item) => <li key={item}>{item}</li>)}</ul></section>
+            <section className="document-section"><h3>다음 행동</h3><ol>{active.actionableSteps.map((item) => <li key={item}>{item}</li>)}</ol></section>
+            <section className="document-section"><h3>함께 확인할 법령</h3><div className="tag-list">{active.lawChecklist.map((item) => <span key={item}>{item}</span>)}</div></section>
+            <div className="legal-disclaimer">자동 요약에는 누락이 있을 수 있습니다. 제출 전 원문과 공식 법령을 다시 확인하세요.</div>
+          </>
+        ) : (
+          <div className="empty-state"><FileText aria-hidden="true" /><strong>문서를 분석하면 결과가 여기에 정리됩니다.</strong></div>
+        )}
+      </article>
+    </section>
   );
-};
+}

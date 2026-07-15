@@ -11,7 +11,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { spawn } from "child_process";
-import { createHash } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import type {
@@ -54,6 +54,10 @@ const HOST = process.env.JARAMLAW_HOST || "127.0.0.1";
 const API_TOKEN = process.env.JARAMLAW_API_TOKEN || "";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const IS_LOOPBACK = LOOPBACK_HOSTS.has(HOST);
+const ENCRYPTION_SECRET = process.env.JARAMLAW_DEMO_ENCRYPTION_KEY || "";
+const ENCRYPTION_KEY = ENCRYPTION_SECRET
+  ? createHash("sha256").update(ENCRYPTION_SECRET, "utf8").digest()
+  : randomBytes(32);
 
 if (!IS_LOOPBACK && !API_TOKEN) {
   console.error(
@@ -308,18 +312,13 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     app: "jaramlaw-agent-react-ui",
-    parent_root: PARENT_ROOT,
     python_bridge: {
       enabled: process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE !== "1",
-      python_bin: PYTHON_BIN,
-      source_path: PYTHON_SRC,
       source_present: fs.existsSync(PYTHON_SRC),
-      workflow_path: WORKFLOW_PATH,
       workflow_present: fs.existsSync(WORKFLOW_PATH),
       timeout_ms: PYTHON_TIMEOUT_MS,
     },
     audit: {
-      path: AUDIT_LOG_DIR,
       present: fs.existsSync(AUDIT_LOG_DIR),
       recent_count: readRecentAuditRecords(20).length,
     },
@@ -332,7 +331,6 @@ app.get("/api/health", (_req, res) => {
       team_topology_present: fs.existsSync(TEAM_TOPOLOGY_PATH),
       model_routing_workflow_present: fs.existsSync(MODEL_ROUTING_WORKFLOW_PATH),
       brain_workflow_present: fs.existsSync(BRAIN_WORKFLOW_PATH),
-      trace_path: TRACE_LOG_PATH,
       trace_present: fs.existsSync(TRACE_LOG_PATH),
       trace_recent_count: readTraceRecords(50).length,
     },
@@ -340,7 +338,21 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.get("/api/ops/workflow/status", (_req, res) => {
+app.get("/api/operator/status", requireOperatorAuth, (_req, res) => {
+  res.json({ status: "success", data: { authenticated: true, local_mode: !API_TOKEN } });
+});
+
+app.get("/api/laws", (_req, res) => {
+  res.json({
+    status: "success",
+    source: "seed",
+    updated_at: null,
+    count: PRELOADED_LAWS.length,
+    data: PRELOADED_LAWS,
+  });
+});
+
+app.get("/api/ops/workflow/status", requireOperatorAuth, (_req, res) => {
   const audits = readRecentAuditRecords(25);
   const traces = readTraceRecords(80);
   res.json({
@@ -559,6 +571,9 @@ app.post("/api/summarize", (req, res) => {
   if (!text) {
     return res.status(400).json({ status: "error", message: "문서 내용을 입력해 주세요." });
   }
+  if (Buffer.byteLength(text, "utf8") > 1024 * 1024) {
+    return res.status(413).json({ status: "error", message: "문서는 1MB 이하의 텍스트 파일만 처리할 수 있습니다." });
+  }
 
   const matched = selectRelevantLaws(text);
   const doc: DocSummary = {
@@ -593,16 +608,49 @@ app.post("/api/encrypt-demo", (req, res) => {
   const { text, mode, cipher } = req.body as { text?: string; mode?: string; cipher?: string };
   if (mode === "encrypt") {
     if (!text) return res.status(400).json({ status: "error", message: "암호화할 텍스트가 없습니다." });
-    const cipherText = Buffer.from(`JARAMLAW:${text}:${new Date().toISOString()}`).toString("base64");
-    addSecurityLog("AES_GCM_ENCRYPT", `${text.length} chars`, "AES-GCM simulation sealed a client-side payload.");
-    return res.json({ status: "success", cipherText });
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+    const encrypted = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
+    const envelope = {
+      v: 1,
+      alg: "AES-256-GCM",
+      iv: iv.toString("base64url"),
+      tag: cipher.getAuthTag().toString("base64url"),
+      data: encrypted.toString("base64url"),
+    };
+    const cipherText = Buffer.from(JSON.stringify(envelope), "utf8").toString("base64url");
+    addSecurityLog("AES_GCM_ENCRYPT", `${text.length} chars`, "AES-256-GCM authenticated encryption completed.");
+    return res.json({
+      status: "success",
+      cipherText,
+      algorithm: envelope.alg,
+      key_persistence: ENCRYPTION_SECRET ? "configured" : "process-only",
+    });
   }
 
   if (!cipher) return res.status(400).json({ status: "error", message: "복호화할 블록이 없습니다." });
-  const decoded = Buffer.from(cipher, "base64").toString("utf8");
-  const decrypted = decoded.replace(/^JARAMLAW:/, "").replace(/:\d{4}-\d{2}-\d{2}T.*$/, "");
-  addSecurityLog("AES_GCM_DECRYPT", `${cipher.length} chars`, "AES-GCM simulation restored a sealed payload.");
-  return res.json({ status: "success", decrypted });
+  try {
+    const envelope = JSON.parse(Buffer.from(cipher, "base64url").toString("utf8")) as {
+      v?: number;
+      alg?: string;
+      iv?: string;
+      tag?: string;
+      data?: string;
+    };
+    if (envelope.v !== 1 || envelope.alg !== "AES-256-GCM" || !envelope.iv || !envelope.tag || !envelope.data) {
+      throw new Error("invalid envelope");
+    }
+    const decipher = createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, Buffer.from(envelope.iv, "base64url"));
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(envelope.data, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+    addSecurityLog("AES_GCM_DECRYPT", `${cipher.length} chars`, "AES-256-GCM authentication and decryption completed.");
+    return res.json({ status: "success", decrypted, algorithm: envelope.alg });
+  } catch {
+    return res.status(400).json({ status: "error", message: "암호문이 손상되었거나 현재 서버 키와 일치하지 않습니다." });
+  }
 });
 
 // 인증 없이 전체 상담 세션(아동 프로필·상담 내용)을 그대로 반환하고 있었다 —
@@ -715,6 +763,7 @@ function buildWorkflowInput(
   return {
     persona: clientType === "lawyer" ? "P3" : "P1",
     reference_date: asString(supplied.reference_date) || new Date().toISOString().slice(0, 10),
+    region: asString(supplied.region),
     parents,
     children,
     events,

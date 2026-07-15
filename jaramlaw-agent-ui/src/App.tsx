@@ -1,740 +1,705 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Activity,
   AlertCircle,
+  ArrowRight,
   BookOpen,
   CalendarClock,
   CheckCircle2,
+  ClipboardCheck,
   Cpu,
   Database,
   FileText,
-  Gavel,
-  History,
+  Home,
+  KeyRound,
   Layers3,
   Loader2,
   Lock,
   MessageSquare,
   Play,
+  RefreshCw,
   Scale,
-  Search,
-  Send,
   ShieldCheck,
   Sparkles,
-  UserRound,
+  UserCheck,
 } from "lucide-react";
-
-import { DisputeChart } from "./components/DisputeChart";
-import { DocumentSummarizer } from "./components/DocumentSummarizer";
-import { ExpertReviewPanel } from "./components/ExpertReviewPanel";
-import { LawExplorer } from "./components/LawExplorer";
-import { SecurityConsole } from "./components/SecurityConsole";
+import { apiFetch, getOperatorToken, readApiError, setOperatorToken } from "./api";
 import type { ConsultationSession, HealthStatus } from "./types";
 
-type WorkspaceTab = "consult" | "documents" | "security" | "laws" | "ops";
+const DocumentSummarizer = lazy(() => import("./components/DocumentSummarizer").then((module) => ({ default: module.DocumentSummarizer })));
+const LawExplorer = lazy(() => import("./components/LawExplorer").then((module) => ({ default: module.LawExplorer })));
+const DisputeChart = lazy(() => import("./components/DisputeChart").then((module) => ({ default: module.DisputeChart })));
+const ExpertReviewPanel = lazy(() => import("./components/ExpertReviewPanel").then((module) => ({ default: module.ExpertReviewPanel })));
+const SecurityConsole = lazy(() => import("./components/SecurityConsole").then((module) => ({ default: module.SecurityConsole })));
+
+type ParentTab = "today" | "consult" | "documents" | "laws";
+type AdminTab = "operations" | "reviews" | "security";
 type JsonRecord = Record<string, unknown>;
 
-const demoPrompts = [
-  {
-    key: "academy",
-    label: "학원 환불",
-    title: "선결제 수강료 환불 거부",
-    prompt:
-      "초등학생 영어학원 3개월분 105만원을 선결제했습니다. 1개월 정도 이용한 뒤 중도 해지를 요청했는데 학원장이 할인 패키지라 환불이 어렵다고 합니다.",
-  },
-  {
-    key: "daycare",
-    label: "어린이집 사고",
-    title: "CCTV 열람과 사고보고서",
-    prompt:
-      "24개월 아이가 어린이집 하원 뒤 이마에 멍이 생겼습니다. 어린이집은 단순 사고라고만 하고 CCTV 열람과 사고보고서 제공을 미루고 있습니다.",
-  },
-  {
-    key: "parental",
-    label: "육아휴직",
-    title: "임신·출산휴가와 육아휴직",
-    prompt:
-      "현재 임신 12주차 회사원입니다. 출산전후휴가, 배우자 출산휴가, 육아휴직 급여와 회사가 거부할 때 필요한 절차를 알고 싶습니다.",
-  },
-];
+interface FamilyProfile {
+  birthMonth: string;
+  region: string;
+  household: "two-caregivers" | "single-caregiver" | "expecting";
+}
 
-const workspaceTabs: Array<{ key: WorkspaceTab; label: string; icon: typeof MessageSquare }> = [
+const parentTabs: Array<{ key: ParentTab; label: string; icon: typeof Home }> = [
+  { key: "today", label: "오늘", icon: Home },
   { key: "consult", label: "상담", icon: MessageSquare },
   { key: "documents", label: "서류", icon: FileText },
-  { key: "security", label: "보호", icon: Lock },
   { key: "laws", label: "법령", icon: BookOpen },
-  { key: "ops", label: "운영", icon: Activity },
 ];
 
+const adminTabs: Array<{ key: AdminTab; label: string; icon: typeof Activity }> = [
+  { key: "operations", label: "운영 현황", icon: Activity },
+  { key: "reviews", label: "전문가 검토", icon: UserCheck },
+  { key: "security", label: "보안 검증", icon: ShieldCheck },
+];
+
+const demoPrompts = [
+  { label: "학원 환불", text: "초등학생 영어학원 3개월분을 선결제했습니다. 한 달 이용 후 중도 해지를 요청했지만 할인 상품이라 환불이 안 된다고 합니다." },
+  { label: "어린이집 사고", text: "아이 하원 후 멍을 발견했습니다. 어린이집에서 사고 경위와 CCTV 열람 절차 안내를 미루고 있습니다." },
+  { label: "육아휴직", text: "회사원이며 출산전후휴가와 육아휴직 신청 시기, 회사가 거부할 때 확인할 절차를 알고 싶습니다." },
+];
+
+function parseRoute(): { parent: ParentTab; admin: AdminTab | null } {
+  const value = window.location.hash.replace(/^#\/?/, "");
+  if (value.startsWith("admin")) {
+    const admin = value.split("/")[1] as AdminTab | undefined;
+    return { parent: "today", admin: adminTabs.some((item) => item.key === admin) ? admin! : "operations" };
+  }
+  return { parent: parentTabs.some((item) => item.key === value) ? value as ParentTab : "today", admin: null };
+}
+
+function navigate(path: string) {
+  window.location.hash = path;
+}
+
+function stageFromBirthMonth(birthMonth: string): string {
+  if (!birthMonth) return "프로필 미등록";
+  const birth = new Date(`${birthMonth}-01T00:00:00`);
+  const now = new Date();
+  const months = (now.getFullYear() - birth.getFullYear()) * 12 + now.getMonth() - birth.getMonth();
+  if (months < 0) return "출산 준비";
+  if (months < 12) return "영아기";
+  if (months < 36) return "걸음마기";
+  if (months < 84) return "유아기";
+  return "학령기";
+}
+
+function LoadingPanel() {
+  return <div className="panel loading-panel" role="status"><Loader2 className="spin" aria-hidden="true" /> 화면을 준비하고 있습니다.</div>;
+}
+
 export default function App() {
-  const [language, setLanguage] = useState<"ko" | "en">("ko");
-  const [clientType, setClientType] = useState<"layperson" | "lawyer">("layperson");
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("consult");
+  const [route, setRoute] = useState(parseRoute);
+  const [profile, setProfile] = useState<FamilyProfile>({ birthMonth: "", region: "", household: "two-caregivers" });
+  const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<ConsultationSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ConsultationSession | null>(null);
-  const [userInput, setUserInput] = useState("");
+  const [historyRestricted, setHistoryRestricted] = useState(false);
+  const [query, setQuery] = useState("");
   const [sending, setSending] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [notice, setNotice] = useState("상황을 입력하면 근거와 다음 행동을 분리해 정리합니다.");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
-    void fetchHealth();
-    void loadSessionsList(true);
+    const update = () => setRoute(parseRoute());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
   }, []);
 
-  const latestEngine = useMemo(() => {
-    if (selectedSession?.integration?.backend === "python-engine") return "실행 완료";
-    if (health?.python_bridge.source_present && health?.python_bridge.workflow_present) return "준비됨";
-    if (health?.python_bridge.source_present) return "연결됨";
-    return "대기 중";
-  }, [health, selectedSession]);
+  useEffect(() => {
+    const label = route.admin ? "운영자 콘솔" : parentTabs.find((item) => item.key === route.parent)?.label;
+    document.title = `${label || "오늘"} | 자람법`;
+  }, [route]);
 
-  const commandMetrics = useMemo(
-    () => [
-      {
-        label: "상담 흐름",
-        value: health?.python_bridge.source_present ? "연결" : "대기",
-        detail: health?.python_bridge.workflow_present ? "14단계 검토" : latestEngine,
-        icon: Cpu,
-      },
-      {
-        label: "법령 근거",
-        value: health ? `${health.seed_data.laws}` : "확인 중",
-        detail: `지원 ${health?.seed_data.supports ?? "-"}`,
-        icon: Database,
-      },
-      {
-        label: "검증 기록",
-        value: health?.audit.present ? "준비" : "로컬",
-        detail: `${health?.audit.recent_count ?? 0}건 기록`,
-        icon: ShieldCheck,
-      },
-      {
-        label: "운영 계층",
-        value: health?.operations?.team_topology_present ? "활성" : "확인 중",
-        detail: health?.operations?.trace_recent_count ? `${health.operations.trace_recent_count}건 추적` : "부모 친화형 UI",
-        icon: Activity,
-      },
-    ],
-    [health, latestEngine, selectedSession],
-  );
+  useEffect(() => {
+    void fetch("/api/health").then((response) => response.json()).then(setHealth).catch(() => setHealth(null));
+    void loadSessions();
+  }, []);
 
-  const loadSessionsList = async (selectFirst = false) => {
+  const loadSessions = async () => {
     try {
-      const response = await fetch("/api/history");
-      const data = await response.json();
-      if (data.status === "success") {
-        const nextSessions = data.data as ConsultationSession[];
-        setSessions(nextSessions);
-        if (nextSessions.length > 0) {
-          setSelectedSession((current) => {
-            if (selectFirst || !current) return nextSessions[0];
-            return nextSessions.find((session) => session.id === current.id) || nextSessions[0];
-          });
-        }
+      const response = await apiFetch("/api/history");
+      if (response.status === 401) {
+        setHistoryRestricted(true);
+        return false;
       }
-    } catch (error) {
-      console.error("Failed fetching consultations logs:", error);
-      setErrorMsg("상담 이력을 불러오지 못했습니다.");
-    }
-  };
-
-  const fetchHealth = async () => {
-    try {
-      const response = await fetch("/api/health");
-      if (response.ok) setHealth(await response.json());
+      if (!response.ok) return false;
+      const payload = await response.json();
+      const items = payload.data as ConsultationSession[];
+      setSessions(items);
+      setSelectedSession((current) => current || items[0] || null);
+      setHistoryRestricted(false);
+      return true;
     } catch {
-      setHealth(null);
+      return false;
     }
   };
 
-  const handleSendQuery = async (event: FormEvent) => {
+  const familyStage = useMemo(() => stageFromBirthMonth(profile.birthMonth), [profile.birthMonth]);
+  const profileReady = Boolean(profile.birthMonth && profile.region);
+  const engineLabel = health?.python_bridge.source_present && health.python_bridge.workflow_present ? "상담 엔진 준비" : "내장 기준 모드";
+
+  const sendConsultation = async (event: FormEvent) => {
     event.preventDefault();
-    if (!userInput.trim() || sending) return;
-
-    const query = userInput.trim();
+    if (!query.trim() || sending) return;
     setSending(true);
-    setErrorMsg("");
-    setUserInput("");
-
+    setNotice("입력 보호, 근거 확인, 답변 검증을 순서대로 진행하고 있습니다.");
     try {
       const response = await fetch("/api/consult", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: query,
-          history: selectedSession?.messages || [],
-          clientType,
-          language,
+          message: query.trim(),
+          clientType: "layperson",
+          language: "ko",
+          profile: {
+            reference_date: new Date().toISOString().slice(0, 10),
+            region: profile.region,
+            children: profile.birthMonth ? [{ birth_date: `${profile.birthMonth}-01` }] : [],
+            parents: [{ role: "caregiver", household_type: profile.household }],
+            flags: [profile.household],
+          },
         }),
       });
+      if (!response.ok) throw new Error(await readApiError(response, "상담을 생성하지 못했습니다."));
       const payload = await response.json();
-      if (!response.ok || payload.status !== "success") {
-        throw new Error(payload.message || "상담 생성에 실패했습니다.");
-      }
-      const nextSession = payload.data as ConsultationSession;
-      setSessions((current) => [nextSession, ...current.filter((session) => session.id !== nextSession.id)]);
-      setSelectedSession(nextSession);
-      await fetchHealth();
+      const session = payload.data as ConsultationSession;
+      setSelectedSession(session);
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+      setQuery("");
+      setNotice(payload.failover
+        ? "실시간 상담 엔진 대신 앱에 포함된 기준 자료로 정리했습니다. 공식 출처를 다시 확인하세요."
+        : "상담 정리가 완료되었습니다. 근거와 다음 행동을 확인하세요.");
     } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : "서버 통신 중 오류가 발생했습니다.");
+      setNotice(error instanceof Error ? error.message : "상담 처리 중 오류가 발생했습니다.");
     } finally {
       setSending(false);
     }
   };
 
-  const handleFeedbackUpdate = (updated: ConsultationSession) => {
-    setSelectedSession(updated);
-    setSessions((current) => current.map((session) => (session.id === updated.id ? updated : session)));
+  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % parentTabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + parentTabs.length) % parentTabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = parentTabs.length - 1;
+    else return;
+    event.preventDefault();
+    navigate(parentTabs[next].key);
+    tabRefs.current[next]?.focus();
   };
 
   return (
-    <div className="app-shell" id="jaramlaw-agent-workspace">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">본문으로 건너뛰기</a>
       <header className="app-header">
-        <div className="header-inner">
-          <div className="brand-block">
-            <div className="brand-mark">
-              <Scale className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1>JaramLaw Agent</h1>
-              <p>부모 법률 케어 워크스페이스</p>
-            </div>
-          </div>
-
-          <div className="header-actions">
-            <div className="header-status">
-              <span className={`health-dot ${health?.python_bridge.source_present ? "health-on" : "health-warn"}`} />
-              <span>{latestEngine}</span>
-            </div>
-            <button type="button" className="header-pill" onClick={() => setLanguage(language === "ko" ? "en" : "ko")}>
-              {language === "ko" ? "KO" : "EN"}
-            </button>
-          </div>
+        <button type="button" className="brand-button" onClick={() => navigate("today")} aria-label="자람법 오늘 화면">
+          <span className="brand-mark"><Scale aria-hidden="true" /></span>
+          <span><strong>자람법</strong><small>가족 법령·정책 동반자</small></span>
+        </button>
+        <div className="header-actions">
+          <span className="engine-status"><span aria-hidden="true" />{engineLabel}</span>
+          <button type="button" className="operator-link" onClick={() => navigate("admin/operations")}>
+            <Lock aria-hidden="true" /> 운영자
+          </button>
         </div>
       </header>
 
-      <section className="visual-command-band" aria-label="JaramLaw 상담 흐름 요약">
-        <div className="visual-command-copy">
-          <span className="visual-command-kicker">
-            <Sparkles className="h-4 w-4" />
-            부모를 위한 차분한 법률 동반자
-          </span>
-          <h2>아이를 키우며 마주한 법률 고민을 부드럽게 정리합니다</h2>
-          <p>걱정되는 상황을 적으면 JaramLaw가 근거 법령, 제출 서류, 다음 행동과 전문가 검토 필요성을 한 화면에 정돈합니다.</p>
-        </div>
-
-        <div className="visual-command-metrics">
-          {commandMetrics.map((metric) => {
-            const Icon = metric.icon;
-            return (
-              <div className="visual-metric" key={metric.label}>
-                <Icon className="h-4 w-4" />
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-                <em>{metric.detail}</em>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <main className="workspace-layout">
-        <nav className="workspace-tabs" role="tablist" aria-label="JaramLaw 작업 공간">
-          {workspaceTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                id={`tab-${tab.key}`}
-                aria-selected={activeTab === tab.key}
-                aria-controls={`panel-${tab.key}`}
-                className={`workspace-tab ${activeTab === tab.key ? "workspace-tab-active" : ""}`}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {errorMsg && (
-          <div className="error-banner">
-            <AlertCircle className="h-4 w-4" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {activeTab === "consult" ? (
-          <section className="consult-grid" role="tabpanel" id="panel-consult" aria-labelledby="tab-consult">
-            <aside className="side-stack">
-              <section className="panel">
-                <div className="section-title">
-                  <div>
-                    <p className="eyebrow">상담 준비</p>
-                    <h2>가정 상황</h2>
-                  </div>
-                  <span className="mini-chip">{clientType === "lawyer" ? "전문가 모드" : "부모 상담"}</span>
-                </div>
-
-                <div className="profile-toggle" aria-label="상담 대상 선택">
+      {route.admin ? (
+        <AdminConsole
+          activeTab={route.admin}
+          sessions={sessions}
+          selectedSession={selectedSession}
+          onSelectSession={setSelectedSession}
+          onReloadSessions={loadSessions}
+          onSessionUpdated={(updated) => {
+            setSelectedSession(updated);
+            setSessions((current) => current.map((item) => item.id === updated.id ? updated : item));
+          }}
+        />
+      ) : (
+        <>
+          <nav className="parent-tabs" aria-label="부모 화면 탐색">
+            <div className="parent-tablist" role="tablist" aria-label="자람법 주요 화면">
+              {parentTabs.map((tab, index) => {
+                const Icon = tab.icon;
+                const active = route.parent === tab.key;
+                return (
                   <button
+                    key={tab.key}
+                    ref={(element) => { tabRefs.current[index] = element; }}
                     type="button"
-                    className={clientType === "layperson" ? "profile-active" : ""}
-                    onClick={() => setClientType("layperson")}
+                    id={`tab-${tab.key}`}
+                    role="tab"
+                    aria-selected={active}
+                    aria-controls={`panel-${tab.key}`}
+                    tabIndex={active ? 0 : -1}
+                    className={active ? "is-active" : ""}
+                    onClick={() => navigate(tab.key)}
+                    onKeyDown={(event) => handleTabKey(event, index)}
                   >
-                    <UserRound className="h-4 w-4" />
-                    일반인
+                    <Icon aria-hidden="true" /> {tab.label}
                   </button>
-                  <button
-                    type="button"
-                    className={clientType === "lawyer" ? "profile-active" : ""}
-                    onClick={() => setClientType("lawyer")}
-                  >
-                    <Gavel className="h-4 w-4" />
-                    전문가
-                  </button>
-                </div>
+                );
+              })}
+            </div>
+          </nav>
 
-                <div className="scenario-list">
-                  {demoPrompts.map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className="scenario-button"
-                      onClick={() => setUserInput(item.prompt)}
-                    >
-                      <span className="scenario-icon">
-                        <Search className="h-4 w-4" />
-                      </span>
-                      <span>
-                        <small>{item.label}</small>
-                        <strong>{item.title}</strong>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <form onSubmit={handleSendQuery} className="consult-form">
-                  <label htmlFor="legal-query-input" className="field-label">
-                    <MessageSquare className="h-4 w-4" />
-                    상담 내용
-                  </label>
-                  <textarea
-                    id="legal-query-input"
-                    className="consult-textarea"
-                    value={userInput}
-                    onChange={(event) => setUserInput(event.target.value)}
-                    disabled={sending}
-                    placeholder="사실관계, 날짜, 기관명, 금액, 상대방 답변을 함께 입력하세요."
-                  />
-                  <button type="submit" className="primary-button w-full" disabled={sending || !userInput.trim()}>
-                    {sending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        상담 흐름 실행 중
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" />
-                        상담 정리 시작
-                      </>
-                    )}
-                  </button>
-                </form>
-              </section>
-
-              <section className="panel">
-                <div className="section-title">
-                  <div>
-                    <p className="eyebrow">이전 상담</p>
-                    <h2>상담 이력</h2>
-                  </div>
-                  <span className="mini-chip">{sessions.length}</span>
-                </div>
-                <div className="history-list">
-                  {sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      type="button"
-                      className={`history-item ${selectedSession?.id === session.id ? "history-item-active" : ""}`}
-                      onClick={() => setSelectedSession(session)}
-                    >
-                      <History className="h-4 w-4" />
-                      <span>
-                        <strong>{session.title}</strong>
-                        <small>
-                          {formatDate(session.date)} · {formatBackend(session.integration?.backend)}
-                        </small>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </aside>
-
-            <section className="main-stack">
-              <section className="panel chat-panel">
-                <div className="section-title">
-                  <div>
-                    <p className="eyebrow">정리 결과</p>
-                    <h2>{selectedSession?.title || "상담 결과 대기"}</h2>
-                  </div>
-                  <span className={`status-pill ${selectedSession?.integration?.connected ? "tone-green" : "tone-amber"}`}>
-                    {formatBackend(selectedSession?.integration?.backend)}
-                  </span>
-                </div>
-
-                <div className="chat-stream">
-                  {selectedSession ? (
-                    selectedSession.messages.map((message) => (
-                      <article key={message.id} className={`chat-message ${message.sender === "user" ? "chat-user" : "chat-agent"}`}>
-                        <span className="chat-author">
-                          {message.sender === "user" ? <UserRound className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-                          {message.sender === "user" ? "보호자" : "JaramLaw"}
-                        </span>
-                        <div className="chat-bubble">{message.text}</div>
-                        <time>{new Date(message.timestamp).toLocaleTimeString()}</time>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="empty-state">
-                      <Layers3 className="h-10 w-10" />
-                      <strong>상담을 시작하면 검토 결과가 여기에 정리됩니다.</strong>
-                    </div>
-                  )}
-                </div>
-
-                {sending && (
-                  <div className="loading-row">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    상담 엔진이 내용을 차분히 정리하고 있습니다
-                  </div>
-                )}
-              </section>
-
-              {selectedSession?.riskAnalysis && (
-                <section className="analysis-grid">
-                  <div className="panel">
-                    <DisputeChart analysis={selectedSession.riskAnalysis} language={language} />
-                  </div>
-                  <WorkflowPanel session={selectedSession} />
-                </section>
-              )}
-
-              {selectedSession && (
-                <ExpertReviewPanel session={selectedSession} language={language} onFeedbackSaved={handleFeedbackUpdate} />
-              )}
-            </section>
-          </section>
-        ) : (
-          <section
-            className="workspace-main"
-            role="tabpanel"
-            id={`panel-${activeTab}`}
-            aria-labelledby={`tab-${activeTab}`}
-          >
-            {activeTab === "documents" && <DocumentSummarizer language={language} />}
-            {activeTab === "security" && <SecurityConsole language={language} />}
-            {activeTab === "laws" && <LawExplorer language={language} />}
-            {activeTab === "ops" && <OperationsPanel />}
-          </section>
-        )}
-      </main>
+          <main id="main-content" className="main-content">
+            {route.parent === "today" && (
+              <TodayView
+                profile={profile}
+                setProfile={setProfile}
+                familyStage={familyStage}
+                profileReady={profileReady}
+                health={health}
+                latestSession={selectedSession}
+              />
+            )}
+            {route.parent === "consult" && (
+              <ConsultView
+                profileReady={profileReady}
+                familyStage={familyStage}
+                historyRestricted={historyRestricted}
+                sessions={sessions}
+                selectedSession={selectedSession}
+                setSelectedSession={setSelectedSession}
+                query={query}
+                setQuery={setQuery}
+                sending={sending}
+                notice={notice}
+                onSubmit={sendConsultation}
+              />
+            )}
+            {route.parent === "documents" && <Suspense fallback={<LoadingPanel />}><DocumentSummarizer /></Suspense>}
+            {route.parent === "laws" && <Suspense fallback={<LoadingPanel />}><LawExplorer /></Suspense>}
+          </main>
+        </>
+      )}
 
       <footer className="app-footer">
-        <span>JaramLaw Agent</span>
-        <span>상담 엔진: {health?.python_bridge.source_present ? "연결" : "로컬"}</span>
-        <span>워크플로우: {health?.python_bridge.workflow_present ? "준비" : "확인 필요"}</span>
-        <span>고위험 사안은 전문가 검토를 우선합니다.</span>
+        <span>자람법은 법률 자문이 아닌 양육 정보 보조 도구입니다.</span>
+        <span>고위험 사안은 관계기관 또는 전문가 확인을 우선합니다.</span>
       </footer>
     </div>
   );
 }
 
-function OperationsPanel() {
-  const [status, setStatus] = useState<JsonRecord>({});
-  const [audits, setAudits] = useState<JsonRecord[]>([]);
-  const [traces, setTraces] = useState<JsonRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [publishResult, setPublishResult] = useState("");
-
-  const loadOps = async () => {
-    setLoading(true);
-    try {
-      const [statusResponse, auditResponse, traceResponse] = await Promise.all([
-        fetch("/api/ops/workflow/status"),
-        fetch("/api/ops/audit/logs?limit=8"),
-        fetch("/api/ops/traces?limit=12"),
-      ]);
-      const statusPayload = await statusResponse.json();
-      const auditPayload = await auditResponse.json();
-      const tracePayload = await traceResponse.json();
-      setStatus(asRecord(statusPayload.data));
-      setAudits(asArray(auditPayload.data));
-      setTraces(asArray(tracePayload.data));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadOps();
-  }, []);
-
-  const publishWorkflow = async () => {
-    setPublishResult("");
-    const response = await fetch("/api/ops/workflow/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: "UI ops publish" }),
-    });
-    const payload = await response.json();
-    const data = asRecord(payload.data);
-    setPublishResult(recordString(data, "workflow_sha1", "published"));
-    await loadOps();
-  };
-
-  const workflow = asRecord(status.workflow);
-  const modelRouting = asRecord(workflow.model_routing);
-  const brain = asRecord(workflow.brain);
-  const topology = asRecord(status.topology);
-  const audit = asRecord(status.audit);
-  const trace = asRecord(status.trace);
-  const budget = asRecord(status.budget);
-
+function TodayView({
+  profile,
+  setProfile,
+  familyStage,
+  profileReady,
+  health,
+  latestSession,
+}: {
+  profile: FamilyProfile;
+  setProfile: (profile: FamilyProfile) => void;
+  familyStage: string;
+  profileReady: boolean;
+  health: HealthStatus | null;
+  latestSession: ConsultationSession | null;
+}) {
   return (
-    <section className="ops-console">
-      <div className="panel">
-        <div className="section-title">
-          <div>
-            <p className="eyebrow">운영 확인</p>
-            <h2>에이전트 제어 콘솔</h2>
-          </div>
-          <button type="button" className="secondary-button" onClick={loadOps} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
-            새로고침
+    <div id="panel-today" role="tabpanel" aria-labelledby="tab-today">
+      <section className="briefing-hero">
+        <div>
+          <span className="hero-kicker"><Sparkles aria-hidden="true" /> 오늘 놓치지 않을 일을 먼저</span>
+          <h1>우리 가족에게 필요한 권리와 기한을 한곳에서 확인하세요.</h1>
+          <p>최소한의 가족 정보와 최근 상황으로 적용 가능한 법령, 지원, 다음 행동을 구분해 정리합니다.</p>
+          <button type="button" className="primary-button" onClick={() => navigate("consult")}>
+            상황 상담 시작 <ArrowRight aria-hidden="true" />
           </button>
         </div>
+      </section>
 
-        <div className="ops-grid">
-          <MetricTile icon={Layers3} label="팀 구조" value={topology.present ? "준비" : "누락"} detail="agents/team.yaml" />
-          <MetricTile icon={Cpu} label="모델 라우팅" value={modelRouting.present ? "준비" : "누락"} detail="routing workflow" />
-          <MetricTile icon={Database} label="기억 계층" value={brain.present ? "준비" : "누락"} detail="metadata RAG" />
-          <MetricTile icon={ShieldCheck} label="추적" value={trace.present ? "활성" : "대기"} detail={`${Number(trace.recent_count ?? 0)}건`} />
-        </div>
-
-        <div className="ops-actions">
-          <button type="button" className="primary-button" onClick={publishWorkflow}>
-            <CheckCircle2 className="h-4 w-4" />
-            워크플로우 기록
-          </button>
-          <span>{publishResult ? `sha1 ${publishResult.slice(0, 12)}` : "runs/workflow-publish.json에 로컬 기록"}</span>
-          <span>실행 예산 ${Number(budget.per_run_limit_usd ?? 0.25).toFixed(2)}</span>
-        </div>
-      </div>
-
-      <div className="ops-columns">
-        <section className="panel">
+      <section className="today-grid" aria-label="오늘의 가족 브리핑">
+        <form className="panel family-profile" onSubmit={(event) => event.preventDefault()}>
           <div className="section-title">
-            <div>
-              <p className="eyebrow">감사 기록</p>
-              <h2>최근 검토 리포트</h2>
-            </div>
-            <span className="mini-chip">{Number(audit.recent_count ?? audits.length)}</span>
+            <div><p className="eyebrow">가족 프로필</p><h2>{familyStage}</h2></div>
+            <span className={`status-badge ${profileReady ? "tone-good" : "tone-attention"}`}>{profileReady ? "상담 준비됨" : "2개 항목 필요"}</span>
           </div>
-          <div className="compact-list">
-            {audits.slice(0, 8).map((item, index) => (
-              <div className="compact-row" key={recordString(item, "audit_log_id", `audit-${index}`)}>
-                <strong>{recordString(item, "audit_log_id", recordString(item, "source_file", "감사 기록"))}</strong>
-                <span>{recordString(item, "generated_at", "시간 정보 없음")}</span>
-              </div>
-            ))}
-            {!audits.length && (
-              <div className="compact-row">
-                <strong>감사 기록 없음</strong>
-                <span>상담을 실행하면 검토 기록이 생성됩니다.</span>
-              </div>
-            )}
+          <div className="form-grid">
+            <div>
+              <label className="field-label" htmlFor="birth-month">아이 출생 연월</label>
+              <input id="birth-month" type="month" value={profile.birthMonth} onChange={(event) => setProfile({ ...profile, birthMonth: event.target.value })} />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="region">거주 지역</label>
+              <select id="region" value={profile.region} onChange={(event) => setProfile({ ...profile, region: event.target.value })}>
+                <option value="">선택</option><option>서울</option><option>경기</option><option>인천</option><option>부산</option><option>대구</option><option>광주</option><option>대전</option><option>울산</option><option>세종</option><option>강원</option><option>충북</option><option>충남</option><option>전북</option><option>전남</option><option>경북</option><option>경남</option><option>제주</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="household">가족 상황</label>
+              <select id="household" value={profile.household} onChange={(event) => setProfile({ ...profile, household: event.target.value as FamilyProfile["household"] })}>
+                <option value="two-caregivers">함께 양육</option><option value="single-caregiver">한부모 양육</option><option value="expecting">출산 준비</option>
+              </select>
+            </div>
+          </div>
+          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않으며, 입력값은 이 화면을 새로 열면 초기화됩니다.</p>
+        </form>
+
+        <section className="panel priority-panel">
+          <div className="section-title"><div><p className="eyebrow">먼저 확인</p><h2>오늘의 체크리스트</h2></div><ClipboardCheck aria-hidden="true" /></div>
+          <div className="priority-list">
+            <button type="button" onClick={() => navigate("consult")}><MessageSquare aria-hidden="true" /><span><strong>최근 사건 정리</strong><small>기관 답변, 날짜, 금액을 함께 입력하세요.</small></span><ArrowRight aria-hidden="true" /></button>
+            <button type="button" onClick={() => navigate("laws")}><BookOpen aria-hidden="true" /><span><strong>적용 법령 확인</strong><small>내장 자료의 최신성을 공식 출처에서 다시 확인하세요.</small></span><ArrowRight aria-hidden="true" /></button>
+            <button type="button" onClick={() => navigate("documents")}><FileText aria-hidden="true" /><span><strong>받은 문서 정리</strong><small>개인정보를 지운 텍스트에서 쟁점을 찾습니다.</small></span><ArrowRight aria-hidden="true" /></button>
           </div>
         </section>
 
-        <section className="panel">
-          <div className="section-title">
-            <div>
-              <p className="eyebrow">실행 추적</p>
-              <h2>워크플로우 이벤트</h2>
+        <section className="panel support-panel">
+          <div className="section-title"><div><p className="eyebrow">지원·기한</p><h2>확인할 항목</h2></div><CalendarClock aria-hidden="true" /></div>
+          {profileReady ? (
+            <div className="brief-list">
+              <div><strong>{familyStage} 지원 조건 확인</strong><span>지역과 소득 등 추가 조건은 상담 결과에서 구분합니다.</span></div>
+              <div><strong>신청·통지 기한 확인</strong><span>정확한 사건 날짜를 입력하면 다음 행동과 함께 정리합니다.</span></div>
             </div>
-            <span className="mini-chip">{traces.length}</span>
+          ) : <p className="empty-copy">출생 연월과 지역을 입력하면 확인할 지원과 기한의 범위를 좁힐 수 있습니다.</p>}
+          <div className="dataset-strip"><Database aria-hidden="true" /><span>내장 기준 자료</span><strong>법령 {health?.seed_data.laws ?? "-"} · 지원 {health?.seed_data.supports ?? "-"}</strong></div>
+        </section>
+
+        <section className="panel recent-panel">
+          <div className="section-title"><div><p className="eyebrow">최근 상담</p><h2>{latestSession?.title || "아직 상담이 없습니다"}</h2></div></div>
+          {latestSession ? (
+            <><p>{latestSession.messages.at(-1)?.text}</p><button type="button" className="text-link" onClick={() => navigate("consult")}>상담 결과 열기 <ArrowRight aria-hidden="true" /></button></>
+          ) : <p className="empty-copy">상황을 상담하면 근거, 확인 상태, 다음 행동이 여기에 연결됩니다.</p>}
+        </section>
+      </section>
+    </div>
+  );
+}
+
+function ConsultView({
+  profileReady,
+  familyStage,
+  historyRestricted,
+  sessions,
+  selectedSession,
+  setSelectedSession,
+  query,
+  setQuery,
+  sending,
+  notice,
+  onSubmit,
+}: {
+  profileReady: boolean;
+  familyStage: string;
+  historyRestricted: boolean;
+  sessions: ConsultationSession[];
+  selectedSession: ConsultationSession | null;
+  setSelectedSession: (session: ConsultationSession) => void;
+  query: string;
+  setQuery: (query: string) => void;
+  sending: boolean;
+  notice: string;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  return (
+    <section id="panel-consult" role="tabpanel" aria-labelledby="tab-consult" className="consult-layout">
+      <aside className="consult-sidebar">
+        <form className="panel consult-form" onSubmit={onSubmit}>
+          <div className="section-title">
+            <div><p className="eyebrow">상황 상담</p><h1>무슨 일이 있었나요?</h1></div>
+            <span className={`status-badge ${profileReady ? "tone-good" : "tone-neutral"}`}>{familyStage}</span>
           </div>
-          <div className="compact-list">
-            {traces.slice(0, 10).map((item, index) => (
-              <div className="compact-row" key={recordString(item, "trace_id", `trace-${index}`)}>
-                <strong>{recordString(item, "node", "워크플로우 이벤트")}</strong>
-                <span>{recordString(item, "generated_at", recordString(item, "session_id", "추적 메타데이터"))}</span>
-              </div>
+          {!profileReady && <button type="button" className="profile-reminder" onClick={() => navigate("today")}><AlertCircle aria-hidden="true" /> 가족 프로필을 입력하면 결과 범위를 좁힐 수 있습니다.</button>}
+          <div className="prompt-options" aria-label="상담 예시">
+            {demoPrompts.map((item) => <button type="button" key={item.label} onClick={() => setQuery(item.text)}>{item.label}</button>)}
+          </div>
+          <label className="field-label" htmlFor="consult-query">사실관계와 궁금한 점</label>
+          <textarea id="consult-query" value={query} onChange={(event) => setQuery(event.target.value)} disabled={sending} placeholder="날짜, 기관, 금액, 상대방 답변을 사실대로 적어주세요. 이름과 정확한 주소는 제외하세요." />
+          <button className="primary-button" type="submit" disabled={sending || !query.trim()}>
+            {sending ? <Loader2 className="spin" aria-hidden="true" /> : <Play aria-hidden="true" />}{sending ? "검토 중" : "근거와 다음 행동 정리"}
+          </button>
+          <p className="form-status" role="status" aria-live="polite">{notice}</p>
+        </form>
+
+        <section className="panel history-panel">
+          <div className="section-title"><div><p className="eyebrow">이 화면의 기록</p><h2>상담 목록</h2></div><span className="status-badge tone-neutral">{sessions.length}</span></div>
+          {historyRestricted && <p className="restricted-note"><Lock aria-hidden="true" /> 이전 상담 기록은 운영자 인증 후 조회할 수 있습니다.</p>}
+          <div className="select-list compact">
+            {sessions.map((session) => (
+              <button type="button" className={`select-row ${selectedSession?.id === session.id ? "is-selected" : ""}`} key={session.id} onClick={() => setSelectedSession(session)}>
+                <MessageSquare aria-hidden="true" /><span><strong>{session.title}</strong><small>{new Date(session.date).toLocaleDateString("ko-KR")}</small></span>
+              </button>
             ))}
-            {!traces.length && (
-              <div className="compact-row">
-                <strong>추적 이벤트 없음</strong>
-                <span>감사 워크플로우 실행 후 메타데이터가 표시됩니다.</span>
-              </div>
-            )}
           </div>
         </section>
+      </aside>
+
+      <div className="consult-results">
+        {selectedSession ? <ConsultationResult session={selectedSession} /> : (
+          <div className="panel empty-state large"><Layers3 aria-hidden="true" /><strong>상담을 시작하면 근거와 다음 행동이 여기에 정리됩니다.</strong></div>
+        )}
       </div>
     </section>
   );
 }
 
-function WorkflowPanel({ session }: { session: ConsultationSession }) {
-  const report = asRecord(session.workflowReport);
-  const laws = asArray(report.matched_laws);
-  const supports = asArray(report.support_matches);
-  const rights = asArray(report.rights_cards);
-  const docs = asArray(report.draft_documents);
-  const board = asRecord(report.board_opinions);
-  const human = asRecord(report.human_review);
-  const verifier = asRecord(report.verifier_results);
-
+function ConsultationResult({ session }: { session: ConsultationSession }) {
+  const fallback = session.integration?.backend !== "python-engine";
   return (
-    <div className="panel workflow-panel">
-      <div className="section-title">
-        <div>
-          <p className="eyebrow">상담 엔진</p>
-          <h2>통합 결과</h2>
+    <>
+      <section className="panel conversation-panel">
+        <div className="section-title">
+          <div><p className="eyebrow">상담 결과</p><h1>{session.title}</h1></div>
+          <span className={`status-badge ${fallback ? "tone-attention" : "tone-good"}`}>{fallback ? "내장 기준" : "워크플로우 검증"}</span>
         </div>
-        <span className="mini-chip">{session.auditLogId || "감사 ID 없음"}</span>
+        {fallback && <div className="fallback-banner"><AlertCircle aria-hidden="true" /> 실시간 연동이 아닌 앱 내 기준 자료로 작성했습니다. 공식 법령과 기관 안내를 다시 확인하세요.</div>}
+        <div className="conversation-list">
+          {session.messages.map((message) => (
+            <article key={message.id} className={message.sender === "user" ? "message-user" : "message-agent"}>
+              <strong>{message.sender === "user" ? "보호자" : "자람법"}</strong>
+              <p>{message.text}</p>
+              <time dateTime={message.timestamp}>{new Date(message.timestamp).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <div className="result-grid">
+        {session.riskAnalysis && <section className="panel"><Suspense fallback={<LoadingPanel />}><DisputeChart analysis={session.riskAnalysis} /></Suspense></section>}
+        <WorkflowSummary session={session} />
       </div>
-
-      <div className="ops-grid">
-        <MetricTile icon={BookOpen} label="법령" value={String(session.recommendedLaws.length || laws.length)} detail="검토 법령" />
-        <MetricTile icon={CheckCircle2} label="권리카드" value={String(rights.length)} detail="권리 안내" />
-        <MetricTile icon={FileText} label="문서" value={String(docs.length)} detail="초안" />
-        <MetricTile icon={CalendarClock} label="지원" value={String(supports.length)} detail="지원 제도" />
-      </div>
-
-      <div className="workflow-split">
-        <section>
-          <h3>추천 법령</h3>
-          <div className="compact-list">
-            {session.recommendedLaws.slice(0, 5).map((law) => (
-              <div className="compact-row" key={law.id}>
-                <strong>{law.title}</strong>
-                <span>{law.summary}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h3>보드 진단</h3>
-          <div className="compact-list">
-            {Object.entries(board).slice(0, 4).map(([name, value]) => {
-              const item = asRecord(value);
-              return (
-                <div className="compact-row" key={name}>
-                  <strong>{name.replaceAll("_", " ")}</strong>
-                  <span>{recordSummary(item)}</span>
-                </div>
-              );
-            })}
-            {!Object.keys(board).length && (
-              <div className="compact-row">
-                <strong>{formatBackend(session.integration?.backend)}</strong>
-                <span>{session.integration?.fallback_reason || "이 상담에는 보드 진단 데이터가 연결되지 않았습니다."}</span>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <div className="workflow-split">
-        <section>
-          <h3>문서 초안</h3>
-          <div className="compact-list">
-            {docs.slice(0, 3).map((doc, index) => (
-              <div className="compact-row" key={recordString(doc, "doc_id", `doc-${index}`)}>
-                <strong>{recordString(doc, "title", "문서 초안")}</strong>
-                <span>{recordString(doc, "kind", "초안")}</span>
-              </div>
-            ))}
-            {!docs.length && (
-              <div className="compact-row">
-                <strong>문서 대기열</strong>
-                <span>이 상담에서는 자동 문서 초안이 생성되지 않았습니다.</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h3>검증 게이트</h3>
-          <div className="verifier-box">
-            <strong>{Math.round(Number(verifier.verified_ratio ?? 0) * 100)}%</strong>
-            <span>
-              확인 {Number(verifier.verified_count ?? 0)} · 부분 확인 {Number(verifier.partial_count ?? 0)} · 추가 검토{" "}
-              {Number(verifier.unverifiable_count ?? 0)}
-            </span>
-            <em>{human.needed ? recordString(human, "reason", "전문가 검토 권장") : "자동 검증 통과"}</em>
-          </div>
-        </section>
-      </div>
-    </div>
+    </>
   );
 }
 
-function MetricTile({
-  icon: Icon,
-  label,
-  value,
-  detail,
+function WorkflowSummary({ session }: { session: ConsultationSession }) {
+  const report = asRecord(session.workflowReport);
+  const supports = asArray(report.support_matches);
+  const rights = asArray(report.rights_cards);
+  const drafts = asArray(report.draft_documents);
+  const verifier = asRecord(report.verifier_results);
+  return (
+    <section className="panel workflow-summary">
+      <div className="section-title"><div><p className="eyebrow">근거와 산출물</p><h2>확인 결과</h2></div><span className="status-badge tone-neutral">{session.auditLogId || "감사 ID 없음"}</span></div>
+      <div className="metric-grid">
+        <Metric icon={BookOpen} label="법령" value={session.recommendedLaws.length} />
+        <Metric icon={CheckCircle2} label="권리 안내" value={rights.length} />
+        <Metric icon={FileText} label="문서 초안" value={drafts.length} />
+        <Metric icon={CalendarClock} label="지원 제도" value={supports.length} />
+      </div>
+      <h3>추천 법령</h3>
+      <div className="brief-list">
+        {session.recommendedLaws.slice(0, 4).map((law) => <div key={law.id}><strong>{law.title}</strong><span>{law.summary}</span></div>)}
+        {!session.recommendedLaws.length && <p className="empty-copy">연결된 법령이 없습니다.</p>}
+      </div>
+      <div className="verification-receipt">
+        <ShieldCheck aria-hidden="true" />
+        <div><strong>검증 영수증</strong><span>확인 {Number(verifier.verified_count ?? 0)} · 부분 확인 {Number(verifier.partial_count ?? 0)} · 추가 검토 {Number(verifier.unverifiable_count ?? 0)}</span></div>
+      </div>
+      <div className="legal-disclaimer">법령명, 조문, 시행일, 공식 출처가 모두 확인되지 않은 항목은 제출 전에 다시 검증하세요.</div>
+    </section>
+  );
+}
+
+function AdminConsole({
+  activeTab,
+  sessions,
+  selectedSession,
+  onSelectSession,
+  onReloadSessions,
+  onSessionUpdated,
 }: {
-  icon: typeof BookOpen;
-  label: string;
-  value: string;
-  detail: string;
+  activeTab: AdminTab;
+  sessions: ConsultationSession[];
+  selectedSession: ConsultationSession | null;
+  onSelectSession: (session: ConsultationSession) => void;
+  onReloadSessions: () => Promise<boolean>;
+  onSessionUpdated: (session: ConsultationSession) => void;
+}) {
+  const [token, setToken] = useState(getOperatorToken());
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authMessage, setAuthMessage] = useState("운영 기록과 전문가 검토는 별도 인증이 필요합니다.");
+
+  const verify = async () => {
+    setOperatorToken(token);
+    try {
+      const response = await apiFetch("/api/operator/status");
+      if (!response.ok) throw new Error(await readApiError(response, "운영자 인증에 실패했습니다."));
+      setAuthenticated(true);
+      setAuthMessage("운영자 인증이 확인되었습니다.");
+      await onReloadSessions();
+    } catch (error) {
+      setAuthenticated(false);
+      setAuthMessage(error instanceof Error ? error.message : "운영자 인증에 실패했습니다.");
+    }
+  };
+
+  useEffect(() => { void verify(); }, []);
+
+  const invalidate = () => {
+    setAuthenticated(false);
+    setOperatorToken("");
+    setToken("");
+    setAuthMessage("인증이 만료되었습니다. 운영자 토큰을 다시 입력하세요.");
+  };
+
+  return (
+    <main id="main-content" className="admin-shell">
+      <div className="admin-header">
+        <div><p className="eyebrow">분리된 운영 영역</p><h1>자람법 운영자 콘솔</h1><span>부모 화면과 분리된 감사·검토·보안 도구입니다.</span></div>
+        <button type="button" className="secondary-button" onClick={() => navigate("today")}>부모 화면으로</button>
+      </div>
+
+      {!authenticated ? (
+        <form className="panel auth-panel" onSubmit={(event) => { event.preventDefault(); void verify(); }}>
+          <KeyRound aria-hidden="true" />
+          <div><h2>운영자 인증</h2><p>외부 바인딩에서는 `JARAMLAW_API_TOKEN` 값을 입력합니다. 로컬 개발 모드는 비워둘 수 있습니다.</p></div>
+          <label className="field-label" htmlFor="operator-token">운영자 토큰</label>
+          <input id="operator-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="current-password" />
+          <button type="submit" className="primary-button">인증 확인</button>
+          <p className="form-status" role="status" aria-live="polite">{authMessage}</p>
+        </form>
+      ) : (
+        <>
+          <nav className="admin-tabs" aria-label="운영자 도구">
+            {adminTabs.map((tab) => {
+              const Icon = tab.icon;
+              return <button type="button" className={activeTab === tab.key ? "is-active" : ""} key={tab.key} onClick={() => navigate(`admin/${tab.key}`)}><Icon aria-hidden="true" />{tab.label}</button>;
+            })}
+          </nav>
+          <Suspense fallback={<LoadingPanel />}>
+            {activeTab === "operations" && <OperationsPanel onUnauthorized={invalidate} />}
+            {activeTab === "security" && <SecurityConsole onUnauthorized={invalidate} />}
+            {activeTab === "reviews" && (
+              <ReviewQueue
+                sessions={sessions}
+                selectedSession={selectedSession}
+                onSelectSession={onSelectSession}
+                onSessionUpdated={onSessionUpdated}
+                onUnauthorized={invalidate}
+              />
+            )}
+          </Suspense>
+        </>
+      )}
+    </main>
+  );
+}
+
+function ReviewQueue({ sessions, selectedSession, onSelectSession, onSessionUpdated, onUnauthorized }: {
+  sessions: ConsultationSession[];
+  selectedSession: ConsultationSession | null;
+  onSelectSession: (session: ConsultationSession) => void;
+  onSessionUpdated: (session: ConsultationSession) => void;
+  onUnauthorized: () => void;
 }) {
   return (
-    <div className="metric-tile">
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{detail}</em>
-    </div>
+    <section className="admin-review-layout">
+      <div className="panel">
+        <div className="section-title"><div><p className="eyebrow">검토 대기열</p><h2>상담 기록</h2></div><span className="status-badge tone-neutral">{sessions.length}</span></div>
+        <div className="select-list">
+          {sessions.map((session) => <button type="button" className={`select-row ${selectedSession?.id === session.id ? "is-selected" : ""}`} key={session.id} onClick={() => onSelectSession(session)}><MessageSquare aria-hidden="true" /><span><strong>{session.title}</strong><small>{session.expertFeedback?.status === "verified" ? "전문가 확인 완료" : "검토 필요"}</small></span></button>)}
+        </div>
+      </div>
+      {selectedSession ? <ExpertReviewPanel session={selectedSession} onFeedbackSaved={onSessionUpdated} onUnauthorized={onUnauthorized} /> : <div className="panel empty-state"><UserCheck aria-hidden="true" /><strong>검토할 상담을 선택하세요.</strong></div>}
+    </section>
   );
+}
+
+function OperationsPanel({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [status, setStatus] = useState<JsonRecord>({});
+  const [audits, setAudits] = useState<JsonRecord[]>([]);
+  const [traces, setTraces] = useState<JsonRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [receipt, setReceipt] = useState("운영 상태를 불러오는 중입니다.");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const responses = await Promise.all([
+        apiFetch("/api/ops/workflow/status"),
+        apiFetch("/api/ops/audit/logs?limit=8"),
+        apiFetch("/api/ops/traces?limit=12"),
+      ]);
+      if (responses.some((response) => response.status === 401)) return onUnauthorized();
+      if (responses.some((response) => !response.ok)) throw new Error("운영 상태 일부를 불러오지 못했습니다.");
+      const [statusPayload, auditPayload, tracePayload] = await Promise.all(responses.map((response) => response.json()));
+      setStatus(asRecord(statusPayload.data));
+      setAudits(asArray(auditPayload.data));
+      setTraces(asArray(tracePayload.data));
+      setReceipt("최신 운영 상태를 확인했습니다.");
+    } catch (error) {
+      setReceipt(error instanceof Error ? error.message : "운영 상태를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const publish = async () => {
+    if (!confirmed) return setReceipt("로컬 운영 스냅샷 기록 확인란을 먼저 선택하세요.");
+    const response = await apiFetch("/api/ops/workflow/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: "Operator UI snapshot" }) });
+    if (response.status === 401) return onUnauthorized();
+    if (!response.ok) return setReceipt(await readApiError(response, "스냅샷을 기록하지 못했습니다."));
+    const payload = await response.json();
+    setReceipt(`로컬 기록 완료 · ${String(payload.data.workflow_sha1 || "no-sha").slice(0, 12)}`);
+    setConfirmed(false);
+    await load();
+  };
+
+  const workflow = asRecord(status.workflow);
+  const topology = asRecord(status.topology);
+  const trace = asRecord(status.trace);
+  const budget = asRecord(status.budget);
+  return (
+    <section className="admin-stack">
+      <div className="panel">
+        <div className="section-title"><div><p className="eyebrow">운영 상태</p><h2>상담 워크플로우</h2></div><button type="button" className="icon-button" aria-label="운영 상태 새로고침" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "spin" : ""} aria-hidden="true" /></button></div>
+        <div className="metric-grid admin-metrics">
+          <Metric icon={Layers3} label="팀 구성" value={topology.present ? "준비" : "누락"} />
+          <Metric icon={Cpu} label="워크플로우" value={workflow.present ? "준비" : "누락"} />
+          <Metric icon={Activity} label="최근 추적" value={Number(trace.recent_count ?? 0)} />
+          <Metric icon={Database} label="실행 한도" value={`$${Number(budget.per_run_limit_usd ?? 0.25).toFixed(2)}`} />
+        </div>
+        <div className="approval-box">
+          <label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> 현재 상태를 `runs/workflow-publish.json`에 로컬 기록합니다.</label>
+          <button type="button" className="primary-button" onClick={() => void publish()} disabled={!confirmed}>운영 스냅샷 기록</button>
+        </div>
+        <p className="form-status" role="status" aria-live="polite">{receipt}</p>
+      </div>
+      <div className="admin-columns">
+        <AuditPanel title="최근 감사 기록" items={audits} primary="audit_log_id" secondary="generated_at" />
+        <AuditPanel title="워크플로우 이벤트" items={traces} primary="node" secondary="generated_at" />
+      </div>
+    </section>
+  );
+}
+
+function AuditPanel({ title, items, primary, secondary }: { title: string; items: JsonRecord[]; primary: string; secondary: string }) {
+  return <section className="panel"><div className="section-title"><h2>{title}</h2><span className="status-badge tone-neutral">{items.length}</span></div><div className="audit-list">{items.map((item, index) => <div className="audit-row" key={`${recordString(item, primary, title)}-${index}`}><span className="status-dot" aria-hidden="true" /><div><strong>{recordString(item, primary, title)}</strong><small>{recordString(item, "source_file", "로컬 기록")}</small></div><time>{recordString(item, secondary, "시간 없음")}</time></div>)}{!items.length && <p className="empty-copy">표시할 기록이 없습니다.</p>}</div></section>;
+}
+
+function Metric({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string | number }) {
+  return <div className="metric"><Icon aria-hidden="true" /><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function asRecord(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
 function asArray(value: unknown): JsonRecord[] {
-  return Array.isArray(value) ? value.map(asRecord).filter((item) => Object.keys(item).length > 0) : [];
+  return Array.isArray(value) ? value.map(asRecord) : [];
 }
 
-function recordString(record: JsonRecord, key: string, fallback: string) {
+function recordString(record: JsonRecord, key: string, fallback: string): string {
   const value = record[key];
   return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function recordSummary(record: JsonRecord) {
-  if (Array.isArray(record.findings)) return `${record.findings.length}개 검토 · ${recordString(record, "verdict", "리뷰")}`;
-  if (Array.isArray(record.top_laws)) return `${record.top_laws.length}개 법령`;
-  if (Array.isArray(record.flags)) return record.flags.join(", ") || "특이사항 없음";
-  if (Array.isArray(record.kinds)) return record.kinds.join(", ") || "문서 없음";
-  return JSON.stringify(record).slice(0, 120);
-}
-
-function formatBackend(backend?: string) {
-  if (backend === "python-engine") return "상담 엔진";
-  if (backend === "local-seed") return "로컬 근거";
-  if (backend === "standby" || !backend) return "대기";
-  return backend;
-}
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
 }
