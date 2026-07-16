@@ -198,9 +198,15 @@ class OpenAiClient:
             lines.append(f"- 출처: {law.source_url}")
             lines.append(f"- 근거 등급: {self._SOURCE_LABELS.get(law.source_mode, law.source_mode)}")
             official = (law.official_text or "").strip()
+            is_byeolpyo = "별표" in law.article
             if official:
                 lines.append(f"- 조문 원문: {official[:900]}")
-            else:
+            if is_byeolpyo and law.text_summary.strip():
+                # 별표(계산표 등)는 법제처 Open API가 텍스트로 제공하지 않아(HWP/PDF/이미지·JS 렌더)
+                # 조문 원문 API 응답에 포함되지 않는다. 따라서 시드에 전사된 별표 표가 사실상의 원문이며,
+                # LLM이 '컨텍스트에 없다'고 회피하지 않도록 권위 있는 근거로 제시한다 (출처 재확인 권장).
+                lines.append(f"- 별표 표 원문(법제처 API 미제공 → 전사본, 계산 시 이 표를 근거로 사용): {law.text_summary.strip()[:1400]}")
+            elif not official:
                 lines.append(f"- 요약(원문 아님): {law.text_summary.strip()[:300]}")
             if law.violation_penalty:
                 lines.append(f"- 위반 시: {law.violation_penalty.get('penalty', '')} / 신고처: {law.violation_penalty.get('report_channel', '')}")
