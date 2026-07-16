@@ -34,6 +34,7 @@ import {
   Scale,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserCheck,
 } from "lucide-react";
 import { apiFetch, getOperatorToken, readApiError, setOperatorToken } from "./api";
@@ -170,6 +171,35 @@ function hasProfileInput(profile: FamilyProfile): boolean {
   return Boolean(profile.region) && (anyChild || (profile.household === "expecting" && Boolean(profile.expectedDate)));
 }
 
+// 프로필을 브라우저 localStorage에 보관해 새로고침해도 유지한다 (등록 버튼으로 저장).
+const PROFILE_STORAGE_KEY = "jaramlaw:family-profile";
+const DEFAULT_PROFILE: FamilyProfile = { household: "two-caregivers", region: "", children: [{ birthMonth: "" }], expectedDate: "" };
+function loadStoredProfile(): FamilyProfile {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(PROFILE_STORAGE_KEY) : null;
+    if (!raw) return DEFAULT_PROFILE;
+    const parsed = JSON.parse(raw) as Partial<FamilyProfile>;
+    // 저장 스키마가 바뀌었을 수 있으니 필드별로 방어적으로 복원한다.
+    return {
+      household: parsed.household === "single-caregiver" || parsed.household === "expecting" ? parsed.household : "two-caregivers",
+      region: typeof parsed.region === "string" ? parsed.region : "",
+      children: Array.isArray(parsed.children) && parsed.children.length
+        ? parsed.children.map((c) => ({ birthMonth: typeof c?.birthMonth === "string" ? c.birthMonth : "" }))
+        : [{ birthMonth: "" }],
+      expectedDate: typeof parsed.expectedDate === "string" ? parsed.expectedDate : "",
+    };
+  } catch {
+    return DEFAULT_PROFILE;
+  }
+}
+function storeProfile(profile: FamilyProfile): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    /* localStorage 접근 불가(사생활 모드 등) — 저장 실패해도 앱은 계속 동작 */
+  }
+}
+
 const parentTabs: Array<{ key: ParentTab; label: string; icon: typeof Home }> = [
   { key: "today", label: "오늘", icon: Home },
   { key: "support", label: "지원", icon: Gift },
@@ -228,7 +258,7 @@ function LoadingPanel() {
 
 export default function App() {
   const [route, setRoute] = useState(parseRoute);
-  const [profile, setProfile] = useState<FamilyProfile>({ household: "two-caregivers", region: "", children: [{ birthMonth: "" }], expectedDate: "" });
+  const [profile, setProfile] = useState<FamilyProfile>(loadStoredProfile);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<ConsultationSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ConsultationSession | null>(null);
@@ -309,6 +339,7 @@ export default function App() {
           message: query.trim(),
           clientType: "layperson",
           language: "ko",
+          threadId: activeThread ? activeThread.id : undefined,
           history: activeThread ? activeThread.messages.slice(-6) : [],
           profile: {
             reference_date: new Date().toISOString().slice(0, 10),
@@ -325,24 +356,11 @@ export default function App() {
       });
       if (!response.ok) throw new Error(await readApiError(response, "상담을 생성하지 못했습니다."));
       const payload = await response.json();
+      // 서버가 스레드의 단일 소스다. threaded=true면 payload.data가 이번 문답까지 이어붙인
+      // 전체 스레드, 아니면 새 세션. 두 경우 모두 id 기준으로 목록을 교체·선두 배치하면 된다.
       const session = payload.data as ConsultationSession;
-      if (activeThread && !payload.failover) {
-        // 같은 스레드에 이번 문답(질문+답변)을 이어붙이고, 근거·리스크는 최신 결과로 갱신.
-        const merged: ConsultationSession = {
-          ...activeThread,
-          messages: [...activeThread.messages, ...session.messages],
-          workflowReport: session.workflowReport ?? activeThread.workflowReport,
-          riskAnalysis: session.riskAnalysis ?? activeThread.riskAnalysis,
-          recommendedLaws: session.recommendedLaws?.length ? session.recommendedLaws : activeThread.recommendedLaws,
-          auditLogId: session.auditLogId ?? activeThread.auditLogId,
-          integration: session.integration ?? activeThread.integration,
-        };
-        setSelectedSession(merged);
-        setSessions((current) => current.map((item) => (item.id === activeThread.id ? merged : item)));
-      } else {
-        setSelectedSession(session);
-        setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
-      }
+      setSelectedSession(session);
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
       setQuery("");
       setCaseData({}); // don't let this run's facts leak into the next consultation
       setNotice(payload.failover
@@ -365,6 +383,24 @@ export default function App() {
     event.preventDefault();
     navigate(parentTabs[next].key);
     tabRefs.current[next]?.focus();
+  };
+
+  const deleteSession = async (id: string) => {
+    const target = sessions.find((s) => s.id === id);
+    // 낙관적 제거: 목록에서 먼저 빼고, 선택돼 있었으면 선택 해제.
+    setSessions((current) => current.filter((s) => s.id !== id));
+    setSelectedSession((current) => (current?.id === id ? null : current));
+    try {
+      const response = await apiFetch(`/api/history/${id}`, { method: "DELETE" });
+      if (!response.ok && response.status !== 404) {
+        // 삭제 실패 시 되돌린다 (404는 이미 없는 것이므로 성공 취급).
+        if (target) setSessions((current) => [target, ...current.filter((s) => s.id !== id)]);
+        setNotice(await readApiError(response, "상담을 삭제하지 못했습니다."));
+      }
+    } catch (error) {
+      if (target) setSessions((current) => [target, ...current.filter((s) => s.id !== id)]);
+      setNotice(error instanceof Error ? error.message : "상담 삭제 중 오류가 발생했습니다.");
+    }
   };
 
   return (
@@ -446,6 +482,7 @@ export default function App() {
                 sessions={sessions}
                 selectedSession={selectedSession}
                 setSelectedSession={setSelectedSession}
+                onDeleteSession={deleteSession}
                 query={query}
                 setQuery={setQuery}
                 caseData={caseData}
@@ -530,6 +567,25 @@ function useBriefing(profile: FamilyProfile): { briefing: BriefingData | null; l
   return { briefing, loading };
 }
 
+// 지원 목록 로딩 중 표시할 스켈레톤 로더 (shimmer 애니메이션). variant로 행/카드 형태 전환.
+function SupportSkeleton({ rows = 3, variant = "row" }: { rows?: number; variant?: "row" | "card" }) {
+  return (
+    <div className={variant === "card" ? "support-cards" : "support-rows"} aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className={`skeleton-${variant}`}>
+          <span className="skeleton-line skeleton-line-lg" />
+          <span className="skeleton-line skeleton-line-sm" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 기존 데이터가 있는 채로 재조회 중일 때 헤더에 붙이는 '갱신 중' 인디케이터.
+function UpdatingChip() {
+  return <span className="updating-chip" role="status"><Loader2 className="spin" aria-hidden="true" /> 갱신 중</span>;
+}
+
 function TodayView({
   profile,
   setProfile,
@@ -554,6 +610,14 @@ function TodayView({
 
   // 입력한 프로필로 매칭 지원제도·기한을 즉시 계산해 이 화면에 보여준다 (LLM 없이 ~1-4초).
   const { briefing, loading: briefingLoading } = useBriefing(profile);
+
+  // 등록 버튼: 현재 프로필을 localStorage에 저장해 새로고침해도 유지한다.
+  const [profileSaved, setProfileSaved] = useState(false);
+  const registerProfile = () => {
+    storeProfile(profile);
+    setProfileSaved(true);
+    window.setTimeout(() => setProfileSaved(false), 2500);
+  };
   return (
     <div id="panel-today" role="tabpanel" aria-labelledby="tab-today">
       <section className="briefing-hero">
@@ -671,7 +735,16 @@ function TodayView({
             )}
           </div>
 
-          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않으며, 입력값은 이 화면을 새로 열면 초기화됩니다.</p>
+          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않습니다. 등록하면 이 브라우저에 저장되어 새로고침해도 유지됩니다.</p>
+          <button
+            type="button"
+            className="register-button"
+            disabled={!profileReady}
+            onClick={registerProfile}
+          >
+            {profileSaved ? <><CheckCircle2 aria-hidden="true" /> 등록되었습니다</> : <><UserCheck aria-hidden="true" /> 프로필 등록</>}
+          </button>
+          {!profileReady && <p className="privacy-note">거주 지역과 자녀 출생 연월(또는 출산 예정일)을 입력하면 등록할 수 있습니다.</p>}
         </form>
 
         <section className="panel priority-panel">
@@ -684,11 +757,11 @@ function TodayView({
         </section>
 
         <section className="panel support-panel">
-          <div className="section-title"><div><p className="eyebrow">지원·기한</p><h2>{familyStage} 맞춤</h2></div><CalendarClock aria-hidden="true" /></div>
+          <div className="section-title"><div><p className="eyebrow">지원·기한</p><h2>{familyStage} 맞춤</h2></div>{briefingLoading && briefing ? <UpdatingChip /> : <CalendarClock aria-hidden="true" />}</div>
           {!hasProfileInput(profile) ? (
             <p className="empty-copy">가족 상황·지역·자녀 정보를 입력하면 우리 가족에게 해당하는 지원제도와 기한을 바로 계산합니다.</p>
           ) : briefingLoading && !briefing ? (
-            <p className="empty-copy">우리 가족에게 맞는 지원제도를 확인하는 중…</p>
+            <SupportSkeleton rows={3} variant="row" />
           ) : briefing && (briefing.supports.length || briefing.events.length) ? (
             <>
               <div className="support-rows">
@@ -765,11 +838,11 @@ function SupportView({ profile, familyStage }: { profile: FamilyProfile; familyS
   return (
     <div id="panel-support" role="tabpanel" aria-labelledby="tab-support">
       <section className="panel">
-        <div className="section-title"><div><p className="eyebrow"><Gift aria-hidden="true" /> 맞춤 지원</p><h2>{familyStage} 지원 혜택</h2></div></div>
+        <div className="section-title"><div><p className="eyebrow"><Gift aria-hidden="true" /> 맞춤 지원</p><h2>{familyStage} 지원 혜택</h2></div>{loading && briefing && <UpdatingChip />}</div>
         {!hasProfileInput(profile) ? (
           <p className="empty-copy">'오늘' 탭에서 가족 상황·지역·자녀 정보를 입력하면 우리 가족에게 해당하는 지원제도를 모두 정리해 드립니다.</p>
         ) : loading && !briefing ? (
-          <p className="empty-copy">우리 가족에게 맞는 지원제도를 확인하는 중…</p>
+          <SupportSkeleton rows={4} variant="card" />
         ) : briefing && briefing.supports.length ? (
           <div className="support-cards">
             {briefing.supports.map((s) => {
@@ -921,6 +994,7 @@ function ConsultView({
   sessions,
   selectedSession,
   setSelectedSession,
+  onDeleteSession,
   query,
   setQuery,
   caseData,
@@ -935,6 +1009,7 @@ function ConsultView({
   sessions: ConsultationSession[];
   selectedSession: ConsultationSession | null;
   setSelectedSession: (session: ConsultationSession | null) => void;
+  onDeleteSession: (id: string) => void;
   query: string;
   setQuery: (query: string) => void;
   caseData: CaseData;
@@ -970,10 +1045,16 @@ function ConsultView({
           {historyRestricted && <p className="restricted-note"><Lock aria-hidden="true" /> 이전 상담 기록은 운영자 인증 후 조회할 수 있습니다.</p>}
           <div className="select-list compact">
             {sessions.map((session) => (
-              <button type="button" className={`select-row ${selectedSession?.id === session.id ? "is-selected" : ""}`} key={session.id} onClick={() => setSelectedSession(session)}>
-                <MessageSquare aria-hidden="true" /><span><strong>{session.title}</strong><small>{new Date(session.date).toLocaleDateString("ko-KR")}</small></span>
-              </button>
+              <div className={`select-row-wrap ${selectedSession?.id === session.id ? "is-selected" : ""}`} key={session.id}>
+                <button type="button" className="select-row-main" onClick={() => setSelectedSession(session)}>
+                  <MessageSquare aria-hidden="true" /><span><strong>{session.title}</strong><small>{new Date(session.date).toLocaleDateString("ko-KR")}</small></span>
+                </button>
+                <button type="button" className="select-row-delete" aria-label={`${session.title} 삭제`} onClick={() => onDeleteSession(session.id)}>
+                  <Trash2 aria-hidden="true" />
+                </button>
+              </div>
             ))}
+            {!sessions.length && <p className="empty-copy">상담 목록이 비어 있습니다.</p>}
           </div>
         </section>
       </aside>
@@ -1152,7 +1233,6 @@ function DraftCard({ draft }: { draft: DraftDocument }) {
 
 function WorkflowSummary({ session }: { session: ConsultationSession }) {
   const report: WorkflowReport = session.workflowReport ?? {};
-  const supports = report.support_matches ?? [];
   const rights = report.rights_cards ?? [];
   const drafts = report.draft_documents ?? [];
   const events = report.calendar?.events ?? [];
@@ -1173,12 +1253,22 @@ function WorkflowSummary({ session }: { session: ConsultationSession }) {
       )}
 
       <div className="metric-grid">
-        <Metric icon={BookOpen} label="법령" value={session.recommendedLaws.length} />
-        <Metric icon={CheckCircle2} label="권리 안내" value={rights.length} />
+        <Metric icon={BookOpen} label="관련 법령" value={session.recommendedLaws.length} />
         <Metric icon={FileText} label="문서 초안" value={drafts.length} />
-        <Metric icon={CalendarClock} label="지원 제도" value={supports.length} />
+        <Metric icon={CheckCircle2} label="권리 안내" value={rights.length} />
+        <Metric icon={CalendarClock} label="법령 캘린더" value={events.length} />
       </div>
 
+      {/* 1. 관련 법령 */}
+      <div className="artifact-block">
+        <h3>관련 법령</h3>
+        <div className="brief-list">
+          {session.recommendedLaws.map((law) => <div key={law.id}><strong>{law.title}</strong><span>{law.summary}</span></div>)}
+          {!session.recommendedLaws.length && <p className="empty-copy">연결된 법령이 없습니다.</p>}
+        </div>
+      </div>
+
+      {/* 2. 문서 초안 */}
       {!!drafts.length && (
         <div className="artifact-block">
           <h3>문서 초안</h3>
@@ -1186,27 +1276,7 @@ function WorkflowSummary({ session }: { session: ConsultationSession }) {
         </div>
       )}
 
-      {!!supports.length && (
-        <div className="artifact-block">
-          <h3>지원 제도</h3>
-          <div className="brief-list">
-            {supports.map((support, i) => (
-              <div key={support.support_id ?? i}>
-                {/* amount_krw is 0 for variable-value benefits ("20일간 통상임금 100%" etc.);
-                    show the descriptive amount there instead of a misleading "0원". */}
-                <strong>{support.name}{support.amount_krw && support.amount_krw > 0 ? ` · ${formatKrw(support.amount_krw)}` : support.amount_description ? ` · ${support.amount_description}` : ""}</strong>
-                <span>{support.condition_summary ?? ""}</span>
-                <span className="brief-meta">
-                  {support.application_channel && `신청: ${support.application_channel}`}
-                  {typeof support.deadline_days_left === "number" && support.deadline_days_left >= 0 &&
-                    (support.deadline_days_left === 0 ? " · 오늘 마감" : ` · D-${support.deadline_days_left}`)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* 3. 권리 안내 */}
       {!!rights.length && (
         <div className="artifact-block">
           <h3>권리 안내</h3>
@@ -1223,6 +1293,7 @@ function WorkflowSummary({ session }: { session: ConsultationSession }) {
         </div>
       )}
 
+      {/* 4. 법령 캘린더 */}
       {!!events.length && (
         <div className="artifact-block">
           <h3>법령 캘린더</h3>
@@ -1237,12 +1308,6 @@ function WorkflowSummary({ session }: { session: ConsultationSession }) {
           {report.calendar?.ical_export && <p className="empty-copy">일정 {events.length}건 — iCal 내보내기 가능</p>}
         </div>
       )}
-
-      <h3>추천 법령</h3>
-      <div className="brief-list">
-        {session.recommendedLaws.slice(0, 4).map((law) => <div key={law.id}><strong>{law.title}</strong><span>{law.summary}</span></div>)}
-        {!session.recommendedLaws.length && <p className="empty-copy">연결된 법령이 없습니다.</p>}
-      </div>
 
       <div className="verification-receipt">
         <ShieldCheck aria-hidden="true" />

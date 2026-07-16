@@ -557,6 +557,17 @@ app.get("/api/history/:id", requireOperatorAuth, (req, res) => {
   return res.json({ status: "success", data: session });
 });
 
+// 상담 목록에서 특정 세션 삭제 (인메모리 — 서버 재시작 시 시드는 복원된다).
+app.delete("/api/history/:id", requireOperatorAuth, (req, res) => {
+  const idx = sessions.findIndex((item) => item.id === req.params.id);
+  if (idx < 0) {
+    return res.status(404).json({ status: "error", message: "상담 세션을 찾을 수 없습니다." });
+  }
+  const [removed] = sessions.splice(idx, 1);
+  addSecurityLog("KEY_ROTATION", `1 session`, `Consultation session deleted: ${removed.id}`);
+  return res.json({ status: "success", data: { id: removed.id, remaining: sessions.length } });
+});
+
 app.post("/api/history/:id/expert-review", requireOperatorAuth, (req, res) => {
   const sessionIndex = sessions.findIndex((item) => item.id === req.params.id);
   if (sessionIndex === -1) {
@@ -593,9 +604,10 @@ app.post("/api/history/:id/expert-review", requireOperatorAuth, (req, res) => {
 
 app.post("/api/consult", rateLimit, async (req, res) => {
   // profile: 아이 생년월일·부모·사건 사실관계. 주어진 값만 쓰고, 없으면 지어내지 않는다.
-  const { message, history, clientType = "layperson", language = "ko", profile } = req.body as {
+  const { message, history, threadId, clientType = "layperson", language = "ko", profile } = req.body as {
     message?: string;
     history?: Message[];
+    threadId?: string;
     clientType?: ClientType;
     language?: UiLanguage;
     profile?: JsonRecord;
@@ -626,29 +638,56 @@ app.post("/api/consult", rateLimit, async (req, res) => {
     rawInput.scenario = scenario;
   }
 
+  // 이어지는 문답이면(threadId 존재 + 매칭 세션) 새 세션을 만들지 않고 그 스레드에 이번
+  // 문답(질문+답변)을 이어붙인다. 서버가 스레드의 단일 소스라 새로고침 후에도 하나로 유지된다.
+  const publishTurn = (built: ConsultationSession) => {
+    const thread = threadId ? sessions.find((s) => s.id === threadId) : undefined;
+    if (!thread) {
+      sessions.unshift(built);
+      return { data: built, threaded: false };
+    }
+    thread.messages.push(...built.messages);
+    thread.workflowReport = built.workflowReport ?? thread.workflowReport;
+    thread.riskAnalysis = built.riskAnalysis ?? thread.riskAnalysis;
+    thread.recommendedLaws = built.recommendedLaws?.length ? built.recommendedLaws : thread.recommendedLaws;
+    thread.auditLogId = built.auditLogId ?? thread.auditLogId;
+    thread.date = built.date;
+    thread.integration = built.integration ?? thread.integration;
+    const idx = sessions.indexOf(thread);
+    if (idx > 0) { sessions.splice(idx, 1); sessions.unshift(thread); }
+    return { data: thread, threaded: true };
+  };
+
   if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE !== "1" && fs.existsSync(PYTHON_SRC)) {
     try {
       const report = await runPythonWorkflow(rawInput, inferScenarioId(query));
+      // 거주지역이 있으면 보조금24 오픈API로 지자체 지원을 실시간 조회해 근거·산출물에 덧붙인다.
+      // 실패/빈 결과는 무시하고 상담은 그대로 진행(graceful) — 법령 산출물이 본체다.
+      const region = asString(asRecord(profile).region);
+      if (region) {
+        const lifeStages = Array.isArray(report.life_stages) ? report.life_stages.map((x) => asString(x)).filter(Boolean) : [];
+        report.government = await fetchGovernmentSupports(region, lifeStages);
+      }
       const session = buildSessionFromReport(query, userMsg, report, clientType, language, {
         backend: "python-engine",
         connected: true,
         engine: "jaramlaw_agent.orchestrator.run_workflow",
       });
-      sessions.unshift(session);
+      const { data, threaded } = publishTurn(session);
       addSecurityLog("SHA_256_HASH", `${query.length} chars`, `Python workflow completed. audit=${session.auditLogId || "n/a"}`);
-      return res.json({ status: "success", dynamic: true, data: session });
+      return res.json({ status: "success", dynamic: true, threaded, data });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       const fallback = buildFallbackSession(query, userMsg, clientType, language, reason);
-      sessions.unshift(fallback);
+      const { data, threaded } = publishTurn(fallback);
       addSecurityLog("KEY_ROTATION", `${query.length} chars`, "Python workflow unavailable; deterministic fallback used. code=python_workflow_unavailable");
-      return res.json({ status: "success", dynamic: false, failover: true, data: fallback });
+      return res.json({ status: "success", dynamic: false, failover: true, threaded, data });
     }
   }
 
   const fallback = buildFallbackSession(query, userMsg, clientType, language, "python_bridge_disabled_or_missing");
-  sessions.unshift(fallback);
-  return res.json({ status: "success", dynamic: false, failover: true, data: fallback });
+  const { data, threaded } = publishTurn(fallback);
+  return res.json({ status: "success", dynamic: false, failover: true, threaded, data });
 });
 
 // 첫 화면 개인화 브리핑 — 입력한 가족 프로필만으로 매칭 지원제도·기한·권리를 즉시 계산.

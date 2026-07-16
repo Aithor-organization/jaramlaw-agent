@@ -195,8 +195,12 @@ def retrieve_matched_laws(
     rrf_k = 60
     tag_ranking = {id(t[0]): rank for rank, t in enumerate(sorted(tag_scored, key=lambda x: -x[1]), start=1)}
     bm25_ranking = {id(t[0]): rank for rank, t in enumerate(sorted(bm25_scored, key=lambda x: -x[1]), start=1)}
+    # BM25 원점수 — 질의와의 실제 어휘 관련성 신호. substring 매칭과 달리 "8"·"이하" 같은
+    # 공통 토큰에 오염되지 않아(예: 감염병예방법=0.0) 프로필-only 노이즈를 정확히 가른다.
+    bm25_score_of = {id(law): score for law, score in bm25_scored}
 
     rrf_scored = []
+    profile_only: list[tuple[LawArticle, float]] = []
     for law, tag_score, reasons in tag_scored:
         tag_rank = tag_ranking[id(law)]
         bm25_rank = bm25_ranking[id(law)]
@@ -206,14 +210,39 @@ def retrieve_matched_laws(
         # tag matching이 0이면 RRF만으로 부족 — 강하게 다운위트
         if tag_score == 0.0 and rrf_score > 0:
             final *= 0.1
-        if tag_score > 0 or any(qt in (law.text_summary.lower() + " ".join(law.tags).lower()) for qt in query_tokens):
-            law.relevance_score = round(final, 4)
-            law.applies_reason = reasons
-            rrf_scored.append((law, final))
+        law.relevance_score = round(final, 4)
+        law.applies_reason = reasons
 
-    # 정렬 + top-K
+        # 질의 직접 관련 신호: 시나리오에서 뽑은 태그가 겹치거나(강한 신호), BM25 원점수>0
+        # (질의 어휘와 실제로 겹침). life_stage("all")·persona만 맞는 법령은 후보에서 제외한다
+        # — 그래야 "육아휴직 질문에 감염병예방법·정보통신망법이 딸려오는" 프로필-only 노이즈가
+        # 걸러진다 (사용자 지적, 2026-07-16). substring 매칭은 "8"·"이하" 공통토큰에 오염돼 폐기.
+        has_scenario_tag = bool(set(law.tags) & extra_tags_from_query)
+        has_query_relevance = bm25_score_of.get(id(law), 0.0) > 0
+        # 학습 부스트(과거 동일 주제 상담에서 실제 인용 성공)도 관련성 신호 — 질의 어휘가 안
+        # 겹쳐도 포함한다. 안 그러면 learned-boost 루프가 죽는다 (test_learning_loop 회귀 방지).
+        has_learned_boost = bool(learned_boosts) and law.law_id in learned_boosts
+        if has_scenario_tag or has_query_relevance or has_learned_boost:
+            rrf_scored.append((law, final))
+        elif tag_score > 0:
+            # 프로필(life_stage/persona)만 맞는 법령 — 질의 관련 법령이 부족할 때만 backfill한다.
+            profile_only.append((law, final))
+
+    # 정렬 + top-K (질의 관련 법령 우선)
     rrf_scored.sort(key=lambda x: -x[1])
-    return [law for law, _ in rrf_scored[:top_k]]
+    result = [law for law, _ in rrf_scored[:top_k]]
+
+    # 질의 관련 법령이 너무 적으면 핵심을 놓칠 수 있으니 프로필 후보로 최소치까지만 채운다.
+    min_laws = min(3, top_k)
+    if len(result) < min_laws and profile_only:
+        profile_only.sort(key=lambda x: -x[1])
+        for law, _ in profile_only:
+            if law not in result:
+                result.append(law)
+            if len(result) >= min_laws:
+                break
+
+    return result[:top_k]
 
 
 # 법제처 실시간 조회는 law_api_client.LawApiClient + law_live.LiveLawEnricher가 담당한다.

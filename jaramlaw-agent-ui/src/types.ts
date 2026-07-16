@@ -123,7 +123,20 @@ export interface WorkflowReport {
   };
   safety_routing?: { triggered?: boolean; category?: string; contact?: string };
   ai_answer?: { mode?: string };
+  /** 보조금24 오픈API에서 실시간 조회한 지자체 지원 (거주지역·자녀 기준). */
+  government?: GovernmentSupport[];
   [key: string]: unknown;
+}
+
+export interface GovernmentSupport {
+  name: string;
+  summary: string;
+  content: string;
+  target: string;
+  agency: string;
+  apply_method: string;
+  deadline: string;
+  detail_url: string;
 }
 
 export interface ConsultationSession {

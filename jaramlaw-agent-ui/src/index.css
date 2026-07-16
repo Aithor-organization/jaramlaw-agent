@@ -904,6 +904,40 @@ h3 {
   background: var(--brand-strong);
 }
 
+/* 프로필 등록 버튼 — 폼 하단 폭 전체 파란 버튼 */
+.register-button {
+  margin-top: 0.9rem;
+  width: 100%;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #1f5f82;
+  color: #fff;
+  background: var(--info, #246b91);
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.register-button:hover:not(:disabled) {
+  background: #1f5f82;
+}
+
+.register-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.register-button svg {
+  width: 17px;
+  height: 17px;
+}
+
 .secondary-button {
   border: 1px solid var(--line-strong);
   color: var(--ink-800);
@@ -1051,6 +1085,75 @@ h3 {
   font-size: 0.66rem;
   font-style: normal;
   font-weight: 800;
+}
+
+/* 삭제 버튼이 있는 상담 목록 행 — 카드 테두리는 wrap이 갖고, 내부는 클릭 영역 + 삭제 버튼 */
+.select-row-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.select-row-wrap.is-selected {
+  border-color: #8ec2b1;
+  background: var(--brand-soft);
+}
+
+.select-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-950);
+  padding: 0.65rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-row-main strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.select-row-main small {
+  color: var(--ink-650);
+  font-size: 0.68rem;
+}
+
+.select-row-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-650, #6b7280);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.select-row-delete:hover {
+  background: #fdecec;
+  color: #c0392b;
+}
+
+.select-row-delete svg {
+  width: 16px;
+  height: 16px;
 }
 
 .restricted-note,
@@ -1755,6 +1858,59 @@ h3 {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* 지원 목록 로딩 스켈레톤 (shimmer) */
+.skeleton-row,
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
+  padding: 0.85rem 0.95rem;
+  background: var(--surface, #fff);
+}
+.skeleton-card {
+  padding: 1.05rem 1.1rem;
+  gap: 0.7rem;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-soft, #eef1f5) 25%, var(--line, #e2e7ee) 37%, var(--surface-soft, #eef1f5) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line-lg { width: 65%; height: 14px; }
+.skeleton-line-sm { width: 40%; }
+.skeleton-card .skeleton-line-lg { width: 55%; }
+
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation-duration: 3s; }
+}
+
+/* '갱신 중' 인디케이터 (기존 데이터 위 재조회) */
+.updating-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: var(--info-soft, #e8f2f7);
+  color: var(--info, #246b91);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.updating-chip svg {
+  width: 13px;
+  height: 13px;
 }
 
 .app-footer {

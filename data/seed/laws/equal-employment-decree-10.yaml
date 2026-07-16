@@ -1,0 +1,14 @@
+law_id: equal-employment-decree-10
+law_name: 남녀고용평등과 일·가정 양립 지원에 관한 법률 시행령
+article: 제10조
+title: 육아휴직의 적용 제외
+effective_date: "2025-10-01"
+text_summary: |
+  법 제19조제1항 단서에서 "대통령령으로 정하는 경우"란 육아휴직을 시작하려는 날(휴직개시예정일)의 전날까지 해당 사업에서 계속 근로한 기간이 6개월 미만인 근로자가 신청한 경우를 말한다.
+  즉, 계속 근로한 기간이 6개월 미만인 근로자가 신청한 육아휴직은 사업주가 허용하지 않을 수 있다.
+  이 예외에 해당하지 않는다면(계속 근로 6개월 이상) 사업주는 육아휴직 신청을 원칙적으로 거부할 수 없다.
+applies_to_personas: ["P1-mother", "P1-father", "P2-mother", "P2-father", "P3"]
+applies_to_life_stages: ["pregnancy", "infant", "toddler", "preschool", "elementary"]
+tags: ["parental-leave", "육아휴직", "예외", "적용제외"]
+source_url: "https://www.law.go.kr/DRF/lawService.do?target=law&type=HTML&MST=277437"
+related_rights_cards: ["parental-leave-1y"]
