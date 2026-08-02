@@ -31,9 +31,6 @@ const APP_ROOT = process.cwd();
 const PARENT_ROOT = path.resolve(APP_ROOT, "..");
 const PYTHON_SRC = path.join(PARENT_ROOT, "src");
 const WORKFLOW_PATH = path.join(PARENT_ROOT, "workflows", "family-legal-jaramlaw.workflow.yaml");
-const AUDIT_LOG_DIR = path.join(PARENT_ROOT, "audit_logs");
-const TRACE_LOG_PATH = path.join(AUDIT_LOG_DIR, "trace.jsonl");
-const RUNS_DIR = path.join(PARENT_ROOT, "runs");
 const TEAM_TOPOLOGY_PATH = path.join(PARENT_ROOT, "agents", "team.yaml");
 const MODEL_ROUTING_WORKFLOW_PATH = path.join(PARENT_ROOT, "workflows", "jaramlaw-model-routing.workflow.yaml");
 const BRAIN_WORKFLOW_PATH = path.join(PARENT_ROOT, "workflows", "jaramlaw-brain.workflow.yaml");
@@ -41,6 +38,24 @@ const BRAIN_WORKFLOW_PATH = path.join(PARENT_ROOT, "workflows", "jaramlaw-brain.
 dotenv.config({ path: path.join(APP_ROOT, ".env") });
 dotenv.config({ path: path.join(APP_ROOT, ".env.local") });
 dotenv.config({ path: path.join(PARENT_ROOT, ".env") });
+
+// 감사 로그·워크플로우 산출물은 컨테이너가 사는 동안 쌓이는 상태다. Railway는
+// 서비스당 볼륨을 하나만 허용하므로(docs.railway.com/reference/volumes) 둘을 한 뿌리
+// 아래 모아 볼륨 하나로 덮는다. 파이썬 쪽 동일 정의는 src/jaramlaw_agent/paths.py —
+// 두 정의가 갈리면 UI가 읽는 디렉터리와 워크플로우가 쓰는 디렉터리가 어긋나므로
+// 반드시 같이 바꿀 것. 미설정 시 저장소 루트라 로컬 개발 경로는 그대로다.
+// dotenv 뒤에 두는 이유: .env 에 적어도 먹게 하려면 로드 이후에 읽어야 한다.
+const DATA_ROOT = process.env.JARAMLAW_DATA_DIR || PARENT_ROOT;
+const AUDIT_LOG_DIR = path.join(DATA_ROOT, "audit_logs");
+const TRACE_LOG_PATH = path.join(AUDIT_LOG_DIR, "trace.jsonl");
+const RUNS_DIR = path.join(DATA_ROOT, "runs");
+
+// 볼륨은 오버레이가 아니라 덮어쓰기로 마운트된다 — 이미지에 있던 .gitkeep 이 가려져
+// 빈 디렉터리가 되거나, 마운트 지점 하위가 아예 없을 수 있다. /api/health 의
+// audit.present 가 그 상태를 "실패"로 보고하지 않도록 부팅 시 만들어 둔다.
+for (const dir of [AUDIT_LOG_DIR, RUNS_DIR]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);

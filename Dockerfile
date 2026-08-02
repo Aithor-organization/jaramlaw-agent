@@ -62,9 +62,17 @@ RUN npm --prefix jaramlaw-agent-ui run build \
 # HOST 는 0.0.0.0 이어야 Railway 트래픽이 들어온다. 다만 non-loopback 인 순간
 # server.ts 가 JARAMLAW_API_TOKEN 없이는 부팅을 거부한다(fail-closed, 아동 개인정보 보호).
 # → Railway Variables 에 JARAMLAW_API_TOKEN 을 반드시 넣을 것.
+# 런타임 상태(감사 로그·runs·학습 메모리)를 한 뿌리로 모은다. Railway는 서비스당
+# 볼륨이 1개라, 흩어져 있으면 볼륨 하나로 덮을 수 없다. 이 경로에 볼륨을 마운트하면
+# 셋 다 영속화된다. 정의는 src/jaramlaw_agent/paths.py + server.ts DATA_ROOT.
 ENV NODE_ENV=production \
     JARAMLAW_HOST=0.0.0.0 \
-    PYTHON_BIN=/opt/venv/bin/python
+    PYTHON_BIN=/opt/venv/bin/python \
+    JARAMLAW_DATA_DIR=/app/data
+
+# 볼륨을 안 붙여도 첫 쓰기가 실패하지 않도록 미리 만들어 둔다.
+# (볼륨을 붙이면 이 디렉터리는 마운트로 덮이고, 앱이 하위를 다시 만든다.)
+RUN mkdir -p /app/data/audit_logs /app/data/runs /app/data/.jaramlaw-brain
 
 WORKDIR /app/jaramlaw-agent-ui
 

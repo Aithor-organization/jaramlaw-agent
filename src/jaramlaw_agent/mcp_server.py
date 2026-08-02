@@ -14,10 +14,7 @@ from typing import Any, Callable
 from .audit import _serialize
 from .memory_rag import JaramLawMemoryRAG
 from .orchestrator import run_workflow
-
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-AUDIT_DIR = PROJECT_ROOT / "audit_logs"
+from .paths import audit_dir
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -44,8 +41,9 @@ def handle_memory_search(args: dict[str, Any]) -> dict[str, Any]:
 def handle_audit_log(args: dict[str, Any]) -> dict[str, Any]:
     limit = int(args.get("limit", 20) or 20)
     records: list[dict[str, Any]] = []
-    if AUDIT_DIR.exists():
-        for path in sorted(AUDIT_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]:
+    directory = audit_dir()
+    if directory.exists():
+        for path in sorted(directory.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]:
             try:
                 parsed = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:

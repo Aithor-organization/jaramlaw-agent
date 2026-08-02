@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from .paths import audit_dir
+
 
 def _serialize(obj: Any) -> Any:
     """dataclass / enum / set 등을 JSON 호환 형식으로 직렬화."""
@@ -30,7 +32,7 @@ def write_audit_log(
     base_dir: Optional[Path] = None,
 ) -> str:
     """final_report → audit_logs/ 디렉토리에 JSON 저장. 파일명은 hash 기반."""
-    base_dir = base_dir or (Path(__file__).resolve().parent.parent.parent / "audit_logs")
+    base_dir = base_dir or audit_dir()
     base_dir.mkdir(parents=True, exist_ok=True)
 
     data = _serialize(final_report)

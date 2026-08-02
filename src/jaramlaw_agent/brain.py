@@ -40,18 +40,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+from .paths import PROJECT_ROOT
+from .paths import brain_dir as _paths_brain_dir
 
 
 def brain_dir() -> Path:
-    """저장소 위치. 기본은 프로젝트 루트의 `.jaramlaw-brain/`.
+    """저장소 위치. `JARAMLAW_BRAIN_DIR` → `JARAMLAW_DATA_DIR`/.jaramlaw-brain → 프로젝트 루트.
 
     경로를 모듈 상수로 두고 함수 기본 인자에 박아 두면 정의 시점에 바인딩되어
     테스트에서도 배포에서도 바꿀 수 없다. 매번 읽는다 — 이 비용은 무시할 만하다.
+
+    실제 결정은 paths.brain_dir()에 있다. 볼륨 하나로 감사 로그·runs·학습
+    메모리를 함께 덮으려면 세 경로가 한 곳에서 결정돼야 하기 때문이다.
     """
-    override = os.environ.get("JARAMLAW_BRAIN_DIR")
-    return Path(override) if override else PROJECT_ROOT / ".jaramlaw-brain"
+    return _paths_brain_dir()
 
 
 def pending_file() -> Path:

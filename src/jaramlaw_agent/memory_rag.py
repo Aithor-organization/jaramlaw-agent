@@ -15,16 +15,12 @@ from typing import Any
 
 from .audit import _serialize
 from .models import FinalReport
-
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-MEMORY_DIR = PROJECT_ROOT / ".jaramlaw-brain"
-MEMORY_PATH = MEMORY_DIR / "memory.jsonl"
+from .paths import memory_path as default_memory_path
 
 
 class JaramLawMemoryRAG:
     def __init__(self, *, memory_path: Path | None = None) -> None:
-        self.memory_path = memory_path or MEMORY_PATH
+        self.memory_path = memory_path or default_memory_path()
 
     def recall(self, redacted_input: dict[str, Any], *, limit: int = 3) -> dict[str, Any]:
         query_tags = _extract_tags(redacted_input)

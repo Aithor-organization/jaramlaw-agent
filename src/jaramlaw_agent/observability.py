@@ -14,10 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .audit import _serialize
-
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-TRACE_LOG = PROJECT_ROOT / "audit_logs" / "trace.jsonl"
+from .paths import trace_log_path
 
 
 @dataclass(frozen=True)
@@ -35,7 +32,7 @@ class TraceEvent:
 class WorkflowTracer:
     def __init__(self, *, session_id: Optional[str] = None, trace_path: Optional[Path] = None) -> None:
         self.session_id = session_id or f"trace-{uuid.uuid4().hex[:12]}"
-        self.trace_path = trace_path or TRACE_LOG
+        self.trace_path = trace_path or trace_log_path()
         self.events: list[TraceEvent] = []
         self._exported_count = 0
 
