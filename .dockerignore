@@ -1,0 +1,38 @@
+# node_modules 는 반드시 제외한다 — `COPY . .` 가 npm ci 레이어를 덮어써서
+# 호스트(macOS)용 네이티브 바이너리가 리눅스 이미지에 섞인다.
+**/node_modules
+**/dist
+**/.vite
+
+.git
+.github
+
+**/__pycache__
+**/*.py[co]
+.venv
+venv
+*.egg-info
+.pytest_cache
+.coverage
+.coverage.*
+
+# 외부 클론 (자체 git 관리, 이미지에 불필요)
+external/
+
+# 시크릿
+.env
+.env.local
+.env.*
+!.env.example
+
+# 런타임 산출물 — 디렉터리 자체는 .gitkeep 으로 유지되고 내용만 제외
+audit_logs/*.json
+audit_logs/*.jsonl
+runs/*.json
+runs/*.png
+reports/agentloop/
+.jaramlaw-brain/
+*.log
+
+jaramlaw-agent-ui/test-results
+jaramlaw-agent-ui/playwright-report
