@@ -33,3 +33,7 @@ external/
 .cache/
 .jaramlaw-brain/
 *.log
+
+# pytest-cov 산출물 (머신별, 커밋 대상 아님)
+.coverage
+.coverage.*
