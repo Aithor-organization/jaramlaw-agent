@@ -34,8 +34,15 @@ RUN pip install --no-cache-dir -e .
 
 # AgentShield(입력/출력 런타임 가드)는 별도 비공개 저장소다.
 # 미설치 시 가드가 degrade 한 채로 뜨므로(pyproject 주석 참조), 프로덕션에서는 켤 것.
-#   Railway → Settings → Build → Build Arguments 에
-#   AGENTSHIELD_GIT=git+https://<GITHUB_TOKEN>@github.com/Aithor-organization/AgentShield
+#
+# 🔴 Railway에는 별도의 "Build Arguments" UI가 없다. 런타임 변수와 같은 곳
+#    (Service → Variables)에 넣으면 빌드 시점에도 주입되며, 아래 ARG 선언이 그 값을 받는다.
+#    참조: https://docs.railway.com/guides/dockerfiles — "you must specify them in the
+#    Dockerfile using the ARG command"
+#
+#   Variables 에 추가:
+#     AGENTSHIELD_GIT = git+https://<GITHUB_TOKEN>@github.com/Aithor-organization/AgentShield
+#
 # 값을 비워두면 설치를 건너뛴다. 설치를 시도했다가 실패하면 빌드를 세운다(조용한 degrade 금지).
 ARG AGENTSHIELD_GIT=""
 RUN if [ -n "$AGENTSHIELD_GIT" ]; then pip install --no-cache-dir "$AGENTSHIELD_GIT"; fi
