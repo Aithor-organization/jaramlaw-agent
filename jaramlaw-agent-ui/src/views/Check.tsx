@@ -155,9 +155,6 @@ export function CheckWizard({
         {step === 1 && expecting && (
           <fieldset className="check-step">
             <legend><h1>출산 예정일이 언제인가요?</h1></legend>
-            <p className="check-hint">
-              예정 월까지만 여쭤봅니다. 첫만남이용권·부모급여 신청 시기를 안내하는 데는 그것으로 충분합니다.
-            </p>
             <YearMonthPicker
               label="출산 예정"
               firstRef={firstFieldRef}
