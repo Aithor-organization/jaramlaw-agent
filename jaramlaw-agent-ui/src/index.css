@@ -2779,15 +2779,25 @@ h3 { font-size: calc(19px * var(--font-scale)); line-height: 1.45; }
 @media (max-width: 767px) { .check-body { padding: 24px; } }
 
 .check-step { border: none; margin: 0; padding: 0; min-width: 0; }
-.check-step legend { padding: 0; width: 100%; }
+/* 🔴 질문 아래 간격은 **legend 가 직접** 갖는다 (2026-08-05).
+   이전에는 `.check-hint` 의 margin-bottom 에만 의존해서, 힌트가 없는 단계
+   ("지금 어느 시기인가요?")만 제목과 선택지가 0px 로 붙어 있었다.
+   힌트가 있는 단계는 힌트를 제목 가까이 붙여야 하므로 `:has()` 로 되돌린다
+   (이 파일은 이미 `.option-row:has(input:checked)` 등에서 :has() 를 쓴다). */
+.check-step legend { padding: 0; width: 100%; margin-bottom: 36px; }
+.check-step:has(.check-hint) legend { margin-bottom: 12px; }
 .check-step h1 {
   font-size: calc(40px * var(--font-scale));
   line-height: 1.35;
 }
-@media (max-width: 767px) { .check-step h1 { font-size: calc(28px * var(--font-scale)); } }
+@media (max-width: 767px) {
+  .check-step h1 { font-size: calc(28px * var(--font-scale)); }
+  .check-step legend { margin-bottom: 28px; }
+  .check-step:has(.check-hint) legend { margin-bottom: 12px; }
+}
 
 .check-hint {
-  margin: 12px 0 32px;
+  margin: 0 0 32px;
   color: var(--ink-650);
   font-size: calc(17px * var(--font-scale));
 }

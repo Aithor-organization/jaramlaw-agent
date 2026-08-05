@@ -966,7 +966,6 @@ function TodayView({
             )}
           </div>
 
-          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않습니다. 저장하면 계정에 남아 다른 기기에서도 그대로 보입니다.</p>
           <button
             type="button"
             className="register-button"

@@ -173,9 +173,6 @@ export function CheckWizard({
         {step === 1 && !expecting && (
           <fieldset className="check-step">
             <legend><h1>아이가 태어난 달을 알려주세요</h1></legend>
-            <p className="check-hint">
-              날짜는 묻지 않습니다. 연도와 월만 있으면 신청 기한을 계산할 수 있어, 그만큼만 받습니다.
-            </p>
             {profile.children.map((child, index) => (
               <div key={index} className="check-child-row">
                 <span>{index + 1}째</span>
@@ -237,7 +234,8 @@ export function CheckWizard({
         {step === 3 && (
           <fieldset className="check-step">
             <legend><h1>어디에 사시나요?</h1></legend>
-            <p className="check-hint">지자체마다 지원이 달라 시·도까지만 확인합니다. 상세 주소는 받지 않습니다.</p>
+            {/* "상세 주소는 받지 않습니다." 는 사용자 지시로 제거 (2026-08-05). 앞 문장만 남긴다. */}
+            <p className="check-hint">지자체마다 지원이 달라 시·도까지만 확인합니다.</p>
             <div className="check-region-grid" role="radiogroup" aria-label="거주 지역">
               {REGIONS.map((region, index) => (
                 <label key={region}>

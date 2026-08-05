@@ -4,7 +4,7 @@
  * 화면이 또 나오면 방금 답한 걸 다시 답하라는 뜻이고, 부모는 거기서 닫는다.
  */
 import { FormEvent, useState } from "react";
-import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { familyStageOf, hasProfileInput, type FamilyProfile } from "../profile";
 import { login as loginRequest, signup as signupRequest, type AccountUser } from "../auth";
 
@@ -105,11 +105,6 @@ export function AuthView({
         <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>
           {busy ? <><Loader2 className="spin" aria-hidden="true" /> 처리 중</> : <>{signingUp ? "가입하기" : "로그인"} <ArrowRight aria-hidden="true" /></>}
         </button>
-
-        <p className="privacy-note">
-          <ShieldCheck aria-hidden="true" />
-          아이 이름과 정확한 주소는 받지 않습니다. 저장하는 것은 이메일, 사는 시·도, 아이 출생 연월입니다.
-        </p>
 
         <div className="auth-switch">
           {signingUp ? (
