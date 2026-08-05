@@ -196,7 +196,14 @@ def cmd_demo(args: argparse.Namespace) -> int:
     for d in report.draft_documents:
         print(f"  - {d.title} ({d.kind})")
         if d.calculation_breakdown:
-            print(f"    계산: {d.calculation_breakdown}")
+            c = d.calculation_breakdown
+            if {"total_paid_krw", "remaining_days", "total_days", "refund_krw"} <= c.keys():
+                print(
+                    f"    계산: 납부 {c['total_paid_krw']:,}원 × 잔여 {c['remaining_days']}일 / 전체 {c['total_days']}일"
+                    f" → 환불액 {c['refund_krw']:,}원"
+                )
+            else:
+                print("    계산: " + " · ".join(f"{k}={v}" for k, v in c.items()))
     print()
 
     if report.verifier_results:

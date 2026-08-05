@@ -22,6 +22,21 @@ import type {
   Message,
   RiskAnalysis,
 } from "./src/types.js";
+import {
+  SESSION_COOKIE,
+  createUser,
+  deleteConsultation,
+  initAccountStore,
+  listConsultations,
+  login as loginUser,
+  logout as logoutUser,
+  recordConsultation,
+  saveProfile,
+  tokenFromCookie,
+  userForToken,
+  type PublicUser,
+  type StoredProfile,
+} from "./src/server/accounts.js";
 
 type JsonRecord = Record<string, unknown>;
 type ClientType = ConsultationSession["clientType"];
@@ -57,6 +72,10 @@ for (const dir of [AUDIT_LOG_DIR, RUNS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+// 부모 계정·프로필·상담 이력도 같은 볼륨에 둔다 (accounts.json). 감사 로그와 뿌리를
+// 공유해야 볼륨 하나로 셋 다 살아남는다.
+initAccountStore(DATA_ROOT);
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const PYTHON_BIN = process.env.PYTHON_BIN || "python";
@@ -83,6 +102,120 @@ if (!IS_LOOPBACK && !API_TOKEN) {
 }
 
 app.use(express.json({ limit: "15mb" }));
+
+/* ── 부모 계정 (운영자 토큰과 완전히 별개의 축) ────────────────────────────────
+ * 운영자 인증은 "우리 팀인가"를 묻고, 이쪽은 "이 기록의 주인인가"를 묻는다.
+ * 둘을 섞으면 부모가 자기 상담을 보려고 운영자 토큰을 받아야 하는 지금 상태가 된다.
+ */
+type AuthedRequest = express.Request & { jaramUser?: PublicUser | null };
+
+/** 쿠키가 있으면 사용자를 붙인다. 없으면 그냥 통과 — 로그인은 대부분의 라우트에서 선택이다. */
+app.use((req, _res, next) => {
+  (req as AuthedRequest).jaramUser = userForToken(tokenFromCookie(req.headers.cookie));
+  next();
+});
+
+function currentUser(req: express.Request): PublicUser | null {
+  return (req as AuthedRequest).jaramUser ?? null;
+}
+
+function requireUser(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  if (!currentUser(req)) {
+    res.status(401).json({ status: "error", message: "로그인이 필요합니다." });
+    return;
+  }
+  next();
+}
+
+function setSessionCookie(res: express.Response, token: string): void {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    // loopback 개발에서는 secure를 켤 수 없다 (http). 배포는 Railway https라 켠다.
+    secure: !IS_LOOPBACK,
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+    path: "/",
+  });
+}
+
+/** 클라이언트가 보낸 프로필을 저장 가능한 모양으로만 추린다 (임의 필드 유입 차단). */
+function sanitizeProfile(value: unknown): StoredProfile | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const household = typeof raw.household === "string" ? raw.household : "two-caregivers";
+  const region = typeof raw.region === "string" ? raw.region.slice(0, 20) : "";
+  const children = Array.isArray(raw.children)
+    ? raw.children
+        .map((child) => {
+          const month = (child as { birthMonth?: unknown })?.birthMonth;
+          return { birthMonth: typeof month === "string" && /^\d{4}-\d{2}$/.test(month) ? month : "" };
+        })
+        .slice(0, 6)
+    : [];
+  const expectedRaw = typeof raw.expectedDate === "string" ? raw.expectedDate : "";
+  const expectedDate = /^\d{4}-\d{2}(-\d{2})?$/.test(expectedRaw) ? expectedRaw : "";
+  const concern = typeof raw.concern === "string" ? raw.concern.slice(0, 40) : "";
+  return { household, region, children, expectedDate, concern };
+}
+
+app.post("/api/auth/signup", rateLimit, (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = createUser(
+    typeof body.email === "string" ? body.email : "",
+    typeof body.password === "string" ? body.password : "",
+    typeof body.nickname === "string" ? body.nickname : "",
+    sanitizeProfile(body.profile),
+  );
+  if (result.kind === "error") return res.status(400).json({ status: "error", message: result.message });
+  setSessionCookie(res, result.token);
+  return res.json({ status: "success", data: result.user });
+});
+
+app.post("/api/auth/login", rateLimit, (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = loginUser(
+    typeof body.email === "string" ? body.email : "",
+    typeof body.password === "string" ? body.password : "",
+  );
+  if (result.kind === "error") return res.status(401).json({ status: "error", message: result.message });
+  setSessionCookie(res, result.token);
+  return res.json({ status: "success", data: result.user });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  logoutUser(tokenFromCookie(req.headers.cookie));
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  return res.json({ status: "success" });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = currentUser(req);
+  return res.json({ status: "success", data: user });
+});
+
+app.put("/api/me/profile", requireUser, (req, res) => {
+  const profile = sanitizeProfile((req.body ?? {}) as unknown);
+  if (!profile) return res.status(400).json({ status: "error", message: "프로필 내용을 확인해 주세요." });
+  const updated = saveProfile(currentUser(req)!.id, profile);
+  if (!updated) return res.status(404).json({ status: "error", message: "계정을 찾을 수 없습니다." });
+  return res.json({ status: "success", data: updated });
+});
+
+/** 부모 본인의 상담 기록. 지금까지는 운영자 토큰이 있어야만 볼 수 있었다. */
+app.get("/api/me/history", requireUser, (req, res) => {
+  const items = listConsultations(currentUser(req)!.id);
+  return res.json({ status: "success", count: items.length, data: items });
+});
+
+app.delete("/api/me/history/:id", requireUser, (req, res) => {
+  const removed = deleteConsultation(currentUser(req)!.id, req.params.id);
+  if (!removed) return res.status(404).json({ status: "error", message: "상담을 찾을 수 없습니다." });
+  return res.json({ status: "success", data: { id: req.params.id } });
+});
 
 // 상담 1건은 파이썬 프로세스 하나를 띄우고 법제처와 OpenAI를 부른다 — 최대 45초, 실제 돈.
 // /api/consult 는 인증이 없는 공개 라우트라, 지금까지는 누구든 루프를 돌려 프로세스와
@@ -402,6 +535,36 @@ async function prewarmSeedSessions(): Promise<void> {
   }
 }
 
+/** 시드 YAML들이 들고 있는 `effective_date` 중 가장 최근 값 (YYYY-MM-DD).
+ *
+ *  "우리가 데이터를 언제 갱신했는가"는 저장소에 기록이 없어서 알 수 없다. 대신
+ *  수록된 법령이 어느 시점 기준인지는 파일 안에 실제로 적혀 있으므로 그것을 쓴다.
+ *  화면 라벨도 반드시 그 이름("수록 법령 최신 시행일")으로 붙일 것 — "갱신일"로
+ *  적으면 없는 사실을 말하는 것이 된다. */
+function newestEffectiveDate(dirs: string[]): string | null {
+  let newest = "";
+  for (const dir of dirs) {
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(".yaml")) continue;
+      try {
+        const text = fs.readFileSync(path.join(dir, entry), "utf8");
+        for (const match of text.matchAll(/effective_date:\s*"?(\d{4}-\d{2}-\d{2})"?/g)) {
+          if (match[1] > newest) newest = match[1];
+        }
+      } catch {
+        /* 개별 파일 읽기 실패는 무시 — 나머지로 계산한다 */
+      }
+    }
+  }
+  return newest || null;
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -420,6 +583,14 @@ app.get("/api/health", (_req, res) => {
       laws: countFiles(path.join(PARENT_ROOT, "data", "seed", "laws"), ".yaml"),
       supports: countFiles(path.join(PARENT_ROOT, "data", "seed", "supports"), ".yaml"),
       scenarios: countFiles(path.join(PARENT_ROOT, "data", "seed", "scenarios"), ".yaml"),
+      // 푸터에 데이터 기준일을 상시 노출해야 하는데(디자인 시스템 §4.8) 지어낼 수 없다.
+      // 파일 mtime은 쓰지 않는다 — git clone 시각이 찍혀서 "오늘 갱신됨"으로 읽힌다.
+      // 시드가 실제로 들고 있는 값은 법령 시행일이므로 그중 가장 최근 것을 보고하고,
+      // 화면에서도 "수록 법령 최신 시행일"이라고 정확히 그 이름으로 부른다.
+      latest_effective_date: newestEffectiveDate([
+        path.join(PARENT_ROOT, "data", "seed", "laws"),
+        path.join(PARENT_ROOT, "data", "seed", "supports"),
+      ]),
     },
     operations: {
       team_topology_present: fs.existsSync(TEAM_TOPOLOGY_PATH),
@@ -655,11 +826,19 @@ app.post("/api/consult", rateLimit, async (req, res) => {
 
   // 이어지는 문답이면(threadId 존재 + 매칭 세션) 새 세션을 만들지 않고 그 스레드에 이번
   // 문답(질문+답변)을 이어붙인다. 서버가 스레드의 단일 소스라 새로고침 후에도 하나로 유지된다.
+  // 로그인한 부모의 상담은 디스크에 남겨 재배포·기기 변경 후에도 본인이 다시 볼 수 있게 한다.
+  // 비로그인 상담은 지금까지처럼 프로세스 메모리에만 남는다 (주인을 특정할 수 없으므로).
+  const owner = currentUser(req);
+  const persist = (session: ConsultationSession) => {
+    if (owner) recordConsultation(owner.id, session, session.id);
+    return session;
+  };
+
   const publishTurn = (built: ConsultationSession) => {
     const thread = threadId ? sessions.find((s) => s.id === threadId) : undefined;
     if (!thread) {
       sessions.unshift(built);
-      return { data: built, threaded: false };
+      return { data: persist(built), threaded: false };
     }
     thread.messages.push(...built.messages);
     thread.workflowReport = built.workflowReport ?? thread.workflowReport;
@@ -670,7 +849,7 @@ app.post("/api/consult", rateLimit, async (req, res) => {
     thread.integration = built.integration ?? thread.integration;
     const idx = sessions.indexOf(thread);
     if (idx > 0) { sessions.splice(idx, 1); sessions.unshift(thread); }
-    return { data: thread, threaded: true };
+    return { data: persist(thread), threaded: true };
   };
 
   if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE !== "1" && fs.existsSync(PYTHON_SRC)) {
@@ -841,8 +1020,32 @@ app.post("/api/briefing", rateLimit, async (req, res) => {
     const lifeStages = Array.isArray(report.life_stages) ? report.life_stages.map((x) => asString(x)).filter(Boolean) : [];
     // 거주지역 지자체 지원을 보조금24에서 실시간 조회 (실패해도 나머지 결과는 그대로).
     const government = await fetchGovernmentSupports(region, lifeStages);
+
+    // 로그인 전에는 상위 2건만 내려보낸다. 클라이언트에서 CSS로 가리는 방식은
+    // 개발자도구를 열면 그대로 보이므로 "가린 척"에 불과하다 — 잠긴 건수만 알려주고
+    // 내용 자체를 서버에서 잘라낸다.
+    const viewer = currentUser(req);
+    if (!viewer) {
+      const PREVIEW_COUNT = 2;
+      const lockedSupports = Math.max(0, supports.length - PREVIEW_COUNT);
+      return res.json({
+        status: "success",
+        preview: true,
+        locked_count: lockedSupports + events.length + rights.length + government.length,
+        data: {
+          life_stages: lifeStages,
+          supports: supports.slice(0, PREVIEW_COUNT),
+          events: [],
+          rights: [],
+          government: [],
+        },
+      });
+    }
+
     return res.json({
       status: "success",
+      preview: false,
+      locked_count: 0,
       data: {
         life_stages: lifeStages,
         supports,

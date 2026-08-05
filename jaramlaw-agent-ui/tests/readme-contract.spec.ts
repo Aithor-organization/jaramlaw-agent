@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { enterApp } from "./helpers";
 
 test("skip link moves keyboard focus to the main content", async ({ page }) => {
   await page.goto("/");
@@ -10,19 +11,29 @@ test("skip link moves keyboard focus to the main content", async ({ page }) => {
 });
 
 test("README parent profile and fallback consultation contract", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("아이 출생 연월").fill("2024-01");
+  await enterApp(page);
+  // 연·월은 네이티브 month 입력이 아니라 분리형 셀렉트다 (디자인 시스템 §4.2)
+  await page.getByLabel("1째 아이 출생 연도").selectOption("2024");
+  await page.getByLabel("1째 아이 출생 월").selectOption("01");
   await page.getByLabel("거주 지역").selectOption({ label: "서울" });
-  await expect(page.getByText("상담 준비됨", { exact: true })).toBeVisible();
-  await expect(page.getByText(/지원 조건 확인/)).toBeVisible();
+  // 프로필이 채워지면 폼을 접을 수 있게 되는 것이 "매칭 가능" 신호다
+  // (예전의 "상담 준비됨" 배지를 대신한다).
+  await expect(page.getByRole("button", { name: "접기" })).toBeVisible();
+  // 이전 단언은 "지원 조건 확인" 문자열을 찾았는데, 그 문자열은 제품 어디에도 없다
+  // (이 파일에만 남아 있던 죽은 단언). 실제 계약으로 바꾼다: 프로필이 채워지면
+  // 지원 패널이 "정보를 입력하세요" 안내를 더 이상 띄우지 않는다.
+  await expect(page.getByText(/가족 상황·지역·자녀 정보를 입력하면/)).toHaveCount(0);
 
+  // 저장하지 않은 입력은 새로고침하면 사라진다 — 저장은 명시적인 행동이다.
   await page.reload();
-  await expect(page.getByLabel("아이 출생 연월")).toHaveValue("");
+  await expect(page.getByRole("tab", { name: "홈" })).toBeVisible();
+  await expect(page.getByLabel("1째 아이 출생 연도")).toHaveValue("");
+  await expect(page.getByLabel("1째 아이 출생 월")).toHaveValue("");
   await expect(page.getByLabel("거주 지역")).toHaveValue("");
 
-  await page.getByRole("tab", { name: "상담" }).click();
+  await page.getByRole("tab", { name: "물어보기" }).click();
   await page.getByRole("button", { name: "학원 환불", exact: true }).click();
-  await page.getByRole("button", { name: "근거와 다음 행동 정리" }).click();
+  await page.getByRole("button", { name: "질문하기" }).click();
   await expect(page.getByText("실시간 연동이 아닌 앱 내 기준 자료로 작성했습니다.")).toBeVisible();
 
   const results = page.locator(".consult-results");
@@ -33,6 +44,7 @@ test("README parent profile and fallback consultation contract", async ({ page }
 
 test("README document and law source contract", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "desktop contract test");
+  await enterApp(page);
   await page.goto("/#documents");
   const fileInput = page.getByLabel("텍스트 문서 선택");
 
@@ -98,7 +110,8 @@ test("README API trust-boundary contract", async ({ request }, testInfo) => {
 });
 
 test("README primary views remain axe-clean after loading", async ({ page }) => {
-  for (const route of ["/", "/#consult", "/#documents", "/#laws", "/#admin/operations", "/#admin/security"]) {
+  await enterApp(page);
+  for (const route of ["/#today", "/#consult", "/#documents", "/#laws", "/#admin/operations", "/#admin/security"]) {
     await page.goto(route);
     if (route.includes("documents")) await page.locator("#panel-documents").waitFor();
     else if (route.includes("laws")) await page.locator("#panel-laws").waitFor();

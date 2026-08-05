@@ -31,6 +31,7 @@
  * Run explicitly:  npx playwright test feature-coverage --project=chromium
  */
 import { test, expect, request as pwRequest } from "@playwright/test";
+import { CHECK_ANSWERS, enterApp, runCheck } from "./helpers";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -64,6 +65,10 @@ test.beforeAll(async () => {
       PYTHON_BIN: process.env.PYTHON_BIN ?? "python3",
       JARAMLAW_PYTHON_SRC: path.join(PARENT_ROOT, "src"),
       JARAMLAW_DISABLE_PYTHON_BRIDGE: "0", // the whole point: bridge ON
+      // 공용 서버와 같은 이유로 레이트리밋을 푼다 (playwright.config.ts 주석 참조).
+      JARAMLAW_RATE_LIMIT_MAX: "500",
+      // 계정 저장소를 저장소 루트가 아닌 임시 경로로 뺀다 (accounts.json 오염 방지).
+      JARAMLAW_DATA_DIR: path.join(UI_ROOT, ".playwright-data"),
     },
     stdio: "ignore",
   });
@@ -97,6 +102,24 @@ async function consult(body: Record<string, unknown>) {
   const json = await res.json();
   await ctx.dispose();
   return json.data as Record<string, any>;
+}
+
+/** 진단 결과 화면(#result)이 쓰는 미리보기 매칭. consult 와 달리 LLM 은 안 타고
+ *  시드 데이터 매칭만 도므로 빠르다. */
+async function briefing() {
+  const ctx = await pwRequest.newContext();
+  const res = await ctx.post(`${BASE}/api/briefing`, {
+    data: {
+      region: CHECK_ANSWERS.region,
+      household: "two-caregivers",
+      children: [{ birthMonth: `${CHECK_ANSWERS.birthYear}-${CHECK_ANSWERS.birthMonth}` }],
+      expectedDate: "",
+    },
+    timeout: 60_000,
+  });
+  const json = await res.json();
+  await ctx.dispose();
+  return { ok: res.ok(), json };
 }
 
 const ACADEMY_REFUND = {
@@ -150,17 +173,16 @@ test.describe("UI rendering — the gap closed on 2026-07-15", () => {
   /** Type a refund query, fill the structured facts (which appear only for a refund
    * query, mirroring the server's scenario inference), and submit. */
   async function submitRefund(page: import("@playwright/test").Page) {
-    await page.goto(`${BASE}/`, { waitUntil: "load" });
-    // Wait for React to mount before touching the tabs.
-    await expect(page.getByRole("tab", { name: "오늘" })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole("tab", { name: "상담" }).click();
+    // 부모 화면 전체가 로그인 뒤로 옮겨갔다 — 가입해서 들어간 뒤 탭을 만진다.
+    await enterApp(page, BASE);
+    await page.getByRole("tab", { name: "물어보기" }).click();
     // The "학원 환불" demo button seeds a refund query, so inferScenario() returns
     // academy_refund and mounts the structured fields.
     await page.getByRole("button", { name: "학원 환불", exact: true }).click();
     await page.getByLabel("총 결제액 (원)").fill("1050000");
     await page.getByLabel("총 수강일수 (일)").fill("90");
     await page.getByLabel("이용한 일수 (일)").fill("35");
-    await page.getByRole("button", { name: "근거와 다음 행동 정리" }).click();
+    await page.getByRole("button", { name: "질문하기" }).click();
   }
 
   test("the computed refund figure is rendered in the workflow panel", async ({ page }) => {
@@ -180,5 +202,47 @@ test.describe("UI rendering — the gap closed on 2026-07-15", () => {
     await expect(draft).toBeVisible({ timeout: 70_000 });
     await draft.locator("summary").click();
     await expect(draft.locator(".draft-body")).toBeVisible();
+  });
+});
+
+/* 진단 결과 화면 — 랜딩이 끌고 오는 퍼널의 결론인데도 e2e 가 한 번도 밟지 않던 구간이다
+   (2026-08-04 확인: 어느 스위트에서도 briefing 이 grep 0건). 공용 서버는 브리지를 끄고
+   돌아 /api/briefing 이 503 을 내므로, ui.spec.ts 는 장애 경로밖에 볼 수 없다. 성공
+   경로는 브리지가 켜진 이 파일에서만 검증할 수 있다. */
+test.describe("check result — the funnel's payoff screen", () => {
+  test("the briefing route matches real supports against the seed data", async () => {
+    const { ok, json } = await briefing();
+    expect(ok, `/api/briefing should return 200, got ${json?.message ?? "?"}`).toBeTruthy();
+    expect(json.status).toBe("success");
+    expect(json.preview, "the pre-signup call is a preview").toBe(true);
+    expect(Array.isArray(json.data?.supports)).toBe(true);
+    // 만 8세 미만 아이라 최소 하나는 걸려야 한다. 0건이면 아래 렌더 테스트가
+    // "아무것도 안 보임"을 통과로 읽어버리므로 여기서 먼저 막는다.
+    expect(json.data.supports.length, "seed matching should find at least one support").toBeGreaterThan(0);
+    expect(typeof json.locked_count, "locked count drives the signup CTA").toBe("number");
+  });
+
+  test("what the engine matched is what the parent actually sees", async ({ page }) => {
+    test.setTimeout(90_000);
+    // 먼저 백엔드에 직접 물어 "무엇이 나와야 하는가"를 확정한 뒤 화면과 대조한다.
+    // 고정 문자열을 박으면 시드가 바뀔 때 테스트가 제품보다 먼저 썩는다.
+    const { json } = await briefing();
+    const expected = json.data.supports[0];
+
+    await runCheck(page, BASE);
+
+    await expect(page.getByRole("heading", { level: 1, name: /항목 \d+건을 찾았습니다/ })).toBeVisible({ timeout: 30_000 });
+    const first = page.locator(".result-item").first();
+    await expect(first).toContainText(expected.name);
+    // 금액은 숫자만 떼면 월 상한이 일시금으로 읽힌다 — 단위·조건이 붙은 문구가 떠야 한다
+    // (CheckResult.tsx 가 amount_description 을 앞세우는 이유).
+    if (expected.amount_description) {
+      await expect(first.locator(".result-amount")).toHaveText(expected.amount_description);
+    }
+
+    // 잠긴 건수는 가입 CTA 의 근거다 — 숫자가 틀리면 "가입하면 더 보인다"가 거짓말이 된다.
+    if (json.locked_count > 0) {
+      await expect(page.locator(".result-locked")).toContainText(`나머지 ${json.locked_count}건`);
+    }
   });
 });

@@ -38,6 +38,24 @@ import {
   UserCheck,
 } from "lucide-react";
 import { apiFetch, getOperatorToken, readApiError, setOperatorToken } from "./api";
+import {
+  DEFAULT_PROFILE,
+  REGIONS,
+  coerceProfile,
+  familyStageOf,
+  hasProfileInput,
+  loadStoredProfile,
+  storeProfile,
+  type FamilyProfile,
+} from "./profile";
+import { formatKrw, shortAmount } from "./format";
+import { fetchMe, logout as logoutRequest, saveProfileToServer, type AccountUser } from "./auth";
+import { Landing, type StagePreset } from "./views/Landing";
+import { BrandLock } from "./components/Logo";
+import { THIS_YEAR, YearMonthPicker } from "./components/YearMonthPicker";
+import { CheckWizard } from "./views/Check";
+import { CheckResult } from "./views/CheckResult";
+import { AuthView } from "./views/Auth";
 import type {
   CalculationBreakdown,
   CaseData,
@@ -153,58 +171,14 @@ function MarkdownMessage({ text }: { text: string }) {
   return <div className="md-body">{blocks}</div>;
 }
 
-interface FamilyProfile {
-  household: "two-caregivers" | "single-caregiver" | "expecting";
-  region: string;
-  children: { birthMonth: string }[]; // 자녀별 출생 연월
-  expectedDate: string; // 출산 예정일 (household=expecting)
-}
 
-// familyStage 표시는 가장 어린(최근 출생) 자녀 기준.
-function primaryBirthMonth(profile: FamilyProfile): string {
-  const months = profile.children.map((c) => c.birthMonth).filter(Boolean).sort();
-  return months.length ? months[months.length - 1] : "";
-}
-// 프로필이 매칭을 돌릴 만큼 채워졌는가 (지역 + 자녀 최소 1명 또는 출산예정+예정일).
-function hasProfileInput(profile: FamilyProfile): boolean {
-  const anyChild = profile.children.some((c) => c.birthMonth);
-  return Boolean(profile.region) && (anyChild || (profile.household === "expecting" && Boolean(profile.expectedDate)));
-}
-
-// 프로필을 브라우저 localStorage에 보관해 새로고침해도 유지한다 (등록 버튼으로 저장).
-const PROFILE_STORAGE_KEY = "jaramlaw:family-profile";
-const DEFAULT_PROFILE: FamilyProfile = { household: "two-caregivers", region: "", children: [{ birthMonth: "" }], expectedDate: "" };
-function loadStoredProfile(): FamilyProfile {
-  try {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(PROFILE_STORAGE_KEY) : null;
-    if (!raw) return DEFAULT_PROFILE;
-    const parsed = JSON.parse(raw) as Partial<FamilyProfile>;
-    // 저장 스키마가 바뀌었을 수 있으니 필드별로 방어적으로 복원한다.
-    return {
-      household: parsed.household === "single-caregiver" || parsed.household === "expecting" ? parsed.household : "two-caregivers",
-      region: typeof parsed.region === "string" ? parsed.region : "",
-      children: Array.isArray(parsed.children) && parsed.children.length
-        ? parsed.children.map((c) => ({ birthMonth: typeof c?.birthMonth === "string" ? c.birthMonth : "" }))
-        : [{ birthMonth: "" }],
-      expectedDate: typeof parsed.expectedDate === "string" ? parsed.expectedDate : "",
-    };
-  } catch {
-    return DEFAULT_PROFILE;
-  }
-}
-function storeProfile(profile: FamilyProfile): void {
-  try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-  } catch {
-    /* localStorage 접근 불가(사생활 모드 등) — 저장 실패해도 앱은 계속 동작 */
-  }
-}
-
+// 라벨은 만든 사람 기준이 아니라 부모가 머릿속에서 쓰는 말로 둔다.
+// "오늘/지원/상담/서류"는 우리 모듈 이름이었지 부모의 언어가 아니었다.
 const parentTabs: Array<{ key: ParentTab; label: string; icon: typeof Home }> = [
-  { key: "today", label: "오늘", icon: Home },
-  { key: "support", label: "지원", icon: Gift },
-  { key: "consult", label: "상담", icon: MessageSquare },
-  { key: "documents", label: "서류", icon: FileText },
+  { key: "today", label: "홈", icon: Home },
+  { key: "support", label: "내 지원", icon: Gift },
+  { key: "consult", label: "물어보기", icon: MessageSquare },
+  { key: "documents", label: "문서", icon: FileText },
   { key: "laws", label: "법령", icon: BookOpen },
 ];
 
@@ -227,29 +201,58 @@ function inferScenario(text: string): "academy_refund" | "general" {
   return /학원|환불|교습|수강료|선결제/.test(text) ? "academy_refund" : "general";
 }
 
-function parseRoute(): { parent: ParentTab; admin: AdminTab | null } {
+/* 화면 층위가 하나 늘었다: 예전에는 해시가 곧 탭이었지만, 이제 로그인 전 화면
+ * (랜딩·진단·결과·가입)과 로그인 후 앱이 갈린다. 해시 없는 "/" 는 랜딩이다. */
+type ViewKind = "landing" | "check" | "result" | "signup" | "login" | "app" | "admin";
+interface Route { view: ViewKind; parent: ParentTab; admin: AdminTab | null }
+
+const PUBLIC_VIEWS: Record<string, ViewKind> = {
+  check: "check",
+  result: "result",
+  signup: "signup",
+  login: "login",
+};
+
+function parseRoute(): Route {
   const value = window.location.hash.replace(/^#\/?/, "");
   if (value.startsWith("admin")) {
     const admin = value.split("/")[1] as AdminTab | undefined;
-    return { parent: "today", admin: adminTabs.some((item) => item.key === admin) ? admin! : "operations" };
+    return {
+      view: "admin",
+      parent: "today",
+      admin: adminTabs.some((item) => item.key === admin) ? admin! : "operations",
+    };
   }
-  return { parent: parentTabs.some((item) => item.key === value) ? value as ParentTab : "today", admin: null };
+  if (PUBLIC_VIEWS[value]) return { view: PUBLIC_VIEWS[value], parent: "today", admin: null };
+  if (parentTabs.some((item) => item.key === value)) {
+    return { view: "app", parent: value as ParentTab, admin: null };
+  }
+  return { view: "landing", parent: "today", admin: null };
 }
 
 function navigate(path: string) {
   window.location.hash = path;
 }
 
-function stageFromBirthMonth(birthMonth: string): string {
-  if (!birthMonth) return "프로필 미등록";
-  const birth = new Date(`${birthMonth}-01T00:00:00`);
-  const now = new Date();
-  const months = (now.getFullYear() - birth.getFullYear()) * 12 + now.getMonth() - birth.getMonth();
-  if (months < 0) return "출산 준비";
-  if (months < 12) return "영아기";
-  if (months < 36) return "걸음마기";
-  if (months < 84) return "유아기";
-  return "학령기";
+const VIEW_TITLES: Partial<Record<ViewKind, string>> = {
+  landing: "자람법 | 가족 법령·정책 안내",
+  check: "3분 진단 | 자람법",
+  result: "진단 결과 | 자람법",
+  signup: "가입 | 자람법",
+  login: "로그인 | 자람법",
+};
+
+/** D-day 배지 문구·톤 (§4.4). 색만으로 상태를 구분하지 않으므로 라벨에 상태어를 넣는다. */
+function ddayLabel(days: number): string {
+  if (days === 0) return "오늘 마감";
+  if (days < 0) return "기한 지남";
+  if (days <= 7) return `D-${days} 마감 임박`;
+  return `D-${days} 신청 기간`;
+}
+function ddayClass(days: number): string {
+  if (days < 0) return "dday dday-past";
+  if (days <= 7) return "dday dday-soon";
+  return "dday dday-ok";
 }
 
 function LoadingPanel() {
@@ -267,6 +270,9 @@ export default function App() {
   const [caseData, setCaseData] = useState<CaseData>({});
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("상황을 입력하면 근거와 다음 행동을 분리해 정리합니다.");
+  const [user, setUser] = useState<AccountUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [stagePreset, setStagePreset] = useState<StagePreset | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
@@ -276,42 +282,109 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const label = route.admin ? "운영자 콘솔" : parentTabs.find((item) => item.key === route.parent)?.label;
-    document.title = `${label || "오늘"} | 자람법`;
+    if (route.view === "admin") { document.title = "운영자 콘솔 | 자람법"; return; }
+    if (route.view === "app") {
+      const label = parentTabs.find((item) => item.key === route.parent)?.label;
+      document.title = `${label || "홈"} | 자람법`;
+      return;
+    }
+    document.title = VIEW_TITLES[route.view] || "자람법";
   }, [route]);
 
   useEffect(() => {
     void fetch("/api/health").then((response) => response.json()).then(setHealth).catch(() => setHealth(null));
-    void loadSessions();
   }, []);
 
+  // 로그인 상태를 먼저 확인한다. 확인 전에는 앱 화면을 그리지 않는다 — 새로고침할 때마다
+  // 로그인 화면이 한 번 번쩍이고 앱으로 넘어가는 걸 막기 위해서다.
+  useEffect(() => {
+    void (async () => {
+      const account = await fetchMe();
+      setUser(account);
+      if (account?.profile) setProfile(account.profile);
+      setAuthChecked(true);
+      if (account) void loadSessions();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 본인 상담 기록. 운영자 토큰이 있으면 운영자 목록도 함께 볼 수 있게 남겨 둔다. */
   const loadSessions = async () => {
     try {
-      const response = await apiFetch("/api/history");
-      if (response.status === 401) {
-        setHistoryRestricted(true);
-        return false;
+      const response = await fetch("/api/me/history");
+      if (response.ok) {
+        const payload = await response.json();
+        const items = (payload.data || []) as ConsultationSession[];
+        setSessions(items);
+        setSelectedSession((current) => current || items[0] || null);
+        setHistoryRestricted(false);
+        return true;
       }
-      if (!response.ok) return false;
-      const payload = await response.json();
-      const items = payload.data as ConsultationSession[];
-      setSessions(items);
-      setSelectedSession((current) => current || items[0] || null);
-      setHistoryRestricted(false);
-      return true;
+      // 운영자 콘솔 경로에서는 여전히 전체 목록이 필요하다.
+      if (getOperatorToken()) {
+        const operatorResponse = await apiFetch("/api/history");
+        if (operatorResponse.ok) {
+          const payload = await operatorResponse.json();
+          const items = payload.data as ConsultationSession[];
+          setSessions(items);
+          setSelectedSession((current) => current || items[0] || null);
+          setHistoryRestricted(false);
+          return true;
+        }
+      }
+      setHistoryRestricted(response.status === 401);
+      return false;
     } catch {
       return false;
     }
   };
 
-  const familyStage = useMemo(() => {
-    const pm = primaryBirthMonth(profile);
-    if (pm) return stageFromBirthMonth(pm);
-    if (profile.household === "expecting" && profile.expectedDate) return "출산 준비";
-    return "프로필 미등록";
-  }, [profile]);
+  // 진단에서 고른 관심사를 상담 입력창에 미리 올려 둔다. 진단에서 "학원비 문제"라고
+  // 답한 사람에게 빈 입력창을 다시 내미는 건 방금 한 말을 못 들은 것과 같다.
+  useEffect(() => {
+    if (!profile.concern || query) return;
+    const seed = { academy: 0, daycare: 1, leave: 2 }[profile.concern];
+    if (typeof seed === "number") setQuery(demoPrompts[seed].text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.concern]);
+
+  const startCheck = (preset: StagePreset) => {
+    setStagePreset(preset);
+    navigate("check");
+  };
+
+  const finishCheck = (next: FamilyProfile) => {
+    setProfile(next);
+    storeProfile(next);
+    navigate("result");
+  };
+
+  const handleAuthenticated = (account: AccountUser) => {
+    setUser(account);
+    if (account.profile) setProfile(coerceProfile(account.profile));
+    void loadSessions();
+    navigate("today");
+  };
+
+  /** 프로필 저장. 로그인 상태면 계정에 붙어 기기를 바꿔도 남는다 —
+   *  예전에는 localStorage뿐이라 "등록"이라는 말과 실제 동작이 달랐다. */
+  const persistProfile = async (next: FamilyProfile) => {
+    storeProfile(next);
+    if (!user) return;
+    const updated = await saveProfileToServer(next);
+    if (updated) setUser(updated);
+  };
+
+  const handleLogout = async () => {
+    await logoutRequest();
+    setUser(null);
+    setSessions([]);
+    setSelectedSession(null);
+    navigate("");
+  };
+
+  const familyStage = useMemo(() => familyStageOf(profile), [profile]);
   const profileReady = hasProfileInput(profile);
-  const engineLabel = health?.python_bridge.source_present && health.python_bridge.workflow_present ? "상담 엔진 준비" : "내장 기준 모드";
 
   const sendConsultation = async (event: FormEvent) => {
     event.preventDefault();
@@ -391,7 +464,11 @@ export default function App() {
     setSessions((current) => current.filter((s) => s.id !== id));
     setSelectedSession((current) => (current?.id === id ? null : current));
     try {
-      const response = await apiFetch(`/api/history/${id}`, { method: "DELETE" });
+      // 본인 기록 삭제가 기본 경로다. 운영자 콘솔에서 지울 때만 예전 경로로 넘어간다.
+      let response = await fetch(`/api/me/history/${id}`, { method: "DELETE" });
+      if (response.status === 401 && getOperatorToken()) {
+        response = await apiFetch(`/api/history/${id}`, { method: "DELETE" });
+      }
       if (!response.ok && response.status !== 404) {
         // 삭제 실패 시 되돌린다 (404는 이미 없는 것이므로 성공 취급).
         if (target) setSessions((current) => [target, ...current.filter((s) => s.id !== id)]);
@@ -403,19 +480,79 @@ export default function App() {
     }
   };
 
+  // 로그인 확인이 끝나기 전에는 앱 화면을 그리지 않는다 (깜빡임 방지).
+  // 운영자 콘솔은 별도 축이라 이 대기와 무관하게 열린다.
+  const gateBlocked = route.view === "app" && authChecked && !user;
+  useEffect(() => {
+    if (gateBlocked) navigate("login");
+  }, [gateBlocked]);
+
+  const publicShell = (children: ReactNode) => (
+    <div className="app-shell is-public">
+      <a className="skip-link" href="#main-content">본문으로 건너뛰기</a>
+      <header className="app-header">
+        <button type="button" className="brand-button" onClick={() => navigate("")} aria-label="자람법 첫 화면">
+          <BrandLock />
+        </button>
+        <div className="header-actions">
+          <button type="button" className="btn-text" onClick={() => navigate("login")}>로그인</button>
+        </div>
+      </header>
+      {children}
+      <SiteFooter health={health} />
+    </div>
+  );
+
+  if (route.view === "landing") {
+    return publicShell(
+      <Landing health={health} onStart={startCheck} onLogin={() => navigate("login")} />,
+    );
+  }
+  if (route.view === "check") {
+    return publicShell(
+      <CheckWizard preset={stagePreset} onDone={finishCheck} onExit={() => navigate("")} />,
+    );
+  }
+  if (route.view === "result") {
+    return publicShell(
+      <CheckResult
+        profile={profile}
+        onSignup={() => navigate("signup")}
+        onLogin={() => navigate("login")}
+        onRestart={() => navigate("check")}
+      />,
+    );
+  }
+  if (route.view === "signup" || route.view === "login") {
+    return publicShell(
+      <AuthView
+        mode={route.view}
+        profile={profile}
+        onAuthenticated={handleAuthenticated}
+        onSwitchMode={(next) => navigate(next)}
+        onExit={() => navigate("")}
+      />,
+    );
+  }
+  if (route.view === "app" && !authChecked) {
+    return publicShell(<LoadingPanel />);
+  }
+  if (gateBlocked) {
+    return publicShell(<LoadingPanel />);
+  }
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">본문으로 건너뛰기</a>
       <header className="app-header">
-        <button type="button" className="brand-button" onClick={() => navigate("today")} aria-label="자람법 오늘 화면">
-          <span className="brand-mark"><Scale aria-hidden="true" /></span>
-          <span><strong>자람법</strong><small>가족 법령·정책 동반자</small></span>
+        <button type="button" className="brand-button" onClick={() => navigate("today")} aria-label="자람법 홈 화면">
+          <BrandLock />
         </button>
         <div className="header-actions">
-          <span className="engine-status"><span aria-hidden="true" />{engineLabel}</span>
-          <button type="button" className="operator-link" onClick={() => navigate("admin/operations")}>
-            <Lock aria-hidden="true" /> 운영자
-          </button>
+          {user && <span className="user-chip">{user.nickname}님</span>}
+          {user && (
+            <button type="button" className="btn-text" onClick={() => void handleLogout()}>로그아웃</button>
+          )}
         </div>
       </header>
 
@@ -464,6 +601,8 @@ export default function App() {
               <TodayView
                 profile={profile}
                 setProfile={setProfile}
+                onSaveProfile={persistProfile}
+                userName={user?.nickname || ""}
                 familyStage={familyStage}
                 profileReady={profileReady}
                 health={health}
@@ -498,11 +637,30 @@ export default function App() {
         </>
       )}
 
-      <footer className="app-footer">
-        <span>자람법은 법률 자문이 아닌 양육 정보 보조 도구입니다.</span>
-        <span>고위험 사안은 관계기관 또는 전문가 확인을 우선합니다.</span>
-      </footer>
+      <SiteFooter health={health} />
     </div>
+  );
+}
+
+/** 푸터 — 면책 · 운영 주체 · 데이터 출처와 갱신일을 상시 노출한다 (§4.8).
+ *  갱신일은 지어내지 않고 서버가 보고한 시드 파일 최신 수정일을 그대로 쓴다. */
+function SiteFooter({ health }: { health: HealthStatus | null }) {
+  return (
+    <footer className="app-footer">
+      <p className="footer-disclaimer">
+        자람법은 법률 자문이 아닌 양육 정보 보조 도구입니다. 안내는 &lsquo;받을 가능성이 있는 지원&rsquo;이며
+        지급 결정이 아닙니다. 내장 자료의 실시간 최신성은 보장하지 않으니 신청 전 공식 출처에서 다시
+        확인하시고, 고위험 사안은 관계기관 또는 전문가 확인을 우선하세요.
+      </p>
+      <p className="footer-meta">
+        데이터 출처: 국가법령정보센터 · 보조금24
+        {typeof health?.seed_data.laws === "number" ? ` · 법령 ${health.seed_data.laws}건 · 지원 ${health.seed_data.supports}건` : ""}
+        {health?.seed_data.latest_effective_date ? ` · 수록 법령 최신 시행일 ${health.seed_data.latest_effective_date}` : ""}
+      </p>
+      <button type="button" className="operator-link" onClick={() => navigate("admin/operations")}>
+        <Lock aria-hidden="true" /> 운영자
+      </button>
+    </footer>
   );
 }
 
@@ -589,6 +747,8 @@ function UpdatingChip() {
 function TodayView({
   profile,
   setProfile,
+  onSaveProfile,
+  userName,
   familyStage,
   profileReady,
   health,
@@ -597,6 +757,8 @@ function TodayView({
 }: {
   profile: FamilyProfile;
   setProfile: (profile: FamilyProfile) => void;
+  onSaveProfile: (profile: FamilyProfile) => Promise<void>;
+  userName: string;
   familyStage: string;
   profileReady: boolean;
   health: HealthStatus | null;
@@ -613,149 +775,39 @@ function TodayView({
 
   // 등록 버튼: 현재 프로필을 localStorage에 저장해 새로고침해도 유지한다.
   const [profileSaved, setProfileSaved] = useState(false);
+  // 프로필은 진단에서 이미 받았다. 홈에서는 요약만 보이고, 고칠 때만 편다.
+  const [editingProfile, setEditingProfile] = useState(!profileReady);
   const registerProfile = () => {
-    storeProfile(profile);
+    void onSaveProfile(profile);
     setProfileSaved(true);
     window.setTimeout(() => setProfileSaved(false), 2500);
   };
   return (
     <div id="panel-today" role="tabpanel" aria-labelledby="tab-today">
-      <section className="briefing-hero">
-        <div>
+      {/* 사진 히어로는 홈에서 뺐다 (2026-08-05). 랜딩과 같은 사진을 로그인 뒤에도
+          또 보여주는 건 화면 상단 245px 를 마케팅에 쓰는 일인데, 여기 온 부모는
+          이미 설득이 끝난 사람이다. 홈의 첫 줄은 인사+행동이면 충분하고,
+          공간은 아래의 실제 데이터(기한·체크리스트)가 가져간다. */}
+      <section className="home-brief">
+        <div className="home-brief-copy">
           <span className="hero-kicker"><Sparkles aria-hidden="true" /> 오늘 놓치지 않을 일을 먼저</span>
-          <h1>우리 가족에게 필요한 권리와 기한을 한곳에서 확인하세요.</h1>
+          <h1>{userName ? `${userName}님 가족이 지금 챙길 것` : "우리 가족에게 필요한 권리와 기한을 한곳에서 확인하세요."}</h1>
           <p>최소한의 가족 정보와 최근 상황으로 적용 가능한 법령, 지원, 다음 행동을 구분해 정리합니다.</p>
-          <button type="button" className="primary-button" onClick={() => navigate("consult")}>
-            상황 상담 시작 <ArrowRight aria-hidden="true" />
-          </button>
         </div>
+        <button type="button" className="primary-button" onClick={() => navigate("consult")}>
+          상황 상담 시작 <ArrowRight aria-hidden="true" />
+        </button>
       </section>
 
-      {/* 발표자료 4p '자람법 소개' — 첫 화면에서 제품 흐름(①입력→②엔진→③산출물)을 바로 전달. */}
-      <section className="panel how-panel" aria-label="자람법 소개">
-        <div className="section-title">
-          <div><p className="eyebrow"><Sparkles aria-hidden="true" /> 자람법 소개</p><h2>묻기 전에 먼저 챙기는 가족 법령 AI 동반자</h2></div>
-        </div>
-        <div className="stage-grid">
-          <article className="stage-card">
-            <div className="stage-head"><span className="stage-num">1</span><UserCheck aria-hidden="true" /><h3>가족 정보 입력</h3></div>
-            <ul>
-              <li>아이 생년월일 · 지역</li>
-              <li>가족 구성 · 고용 형태</li>
-              <li>라이프이벤트 (임신·입학 등)</li>
-              <li>받은 문서 (알림장·통지문)</li>
-            </ul>
-          </article>
-          <article className="stage-card">
-            <div className="stage-head"><span className="stage-num">2</span><Cpu aria-hidden="true" /><h3>자람법 엔진</h3></div>
-            <ul>
-              <li>라이프스테이지 자동 분류</li>
-              <li>법령 · 지원 자동 매칭</li>
-              <li>문서 분석 → 대응 설계</li>
-              <li>인용 · 보안 · 안전 검증</li>
-            </ul>
-          </article>
-          <article className="stage-card">
-            <div className="stage-head"><span className="stage-num">3</span><FileText aria-hidden="true" /><h3>맞춤 산출물</h3></div>
-            <ul>
-              <li>적용 법령·지원 + 신청 D-day</li>
-              <li>근거 조문 포함 권리 카드</li>
-              <li>신고서 · 신청서 초안</li>
-              <li>우리아이 법령 캘린더 (iCal)</li>
-            </ul>
-          </article>
-        </div>
-        <p className="how-tagline">검색해서 찾아 읽는 서비스가 아니라, <strong>아이의 성장 단계에 맞춰 먼저 도착하는</strong> 법령·정책 안내입니다.</p>
-      </section>
+      {/* 제품 소개(3단계 그림)는 랜딩으로 옮겼다. 이미 가입한 부모에게 매번
+          "자람법이란" 을 다시 읽히는 건 화면 한 장을 통째로 버리는 일이다. */}
 
+      {/* 열 래퍼 2개가 레이아웃의 핵심이다 (2026-08-05). 이전에는 패널 4개를 grid 에
+          자동 배치했는데, 행 단위 정렬이라 접힌 프로필(2줄) 옆에 체크리스트(3항목)가
+          오면 프로필 아래에 행 높이만큼의 죽은 공백이 생겼다. 열 안에서 위로 쌓으면
+          공백이 구조적으로 사라진다. 본열=실데이터(기한·상담), 곁열=도구(프로필·체크). */}
       <section className="today-grid" aria-label="오늘의 가족 브리핑">
-        <form className="panel family-profile" onSubmit={(event) => event.preventDefault()}>
-          <div className="section-title">
-            <div><p className="eyebrow">가족 프로필</p><h2>{familyStage}</h2></div>
-            <span className={`status-badge ${profileReady ? "tone-good" : "tone-attention"}`}>{profileReady ? "상담 준비됨" : "2개 항목 필요"}</span>
-          </div>
-          <div className="form-grid">
-            <div>
-              <label className="field-label" htmlFor="household">가족 상황</label>
-              <select id="household" value={profile.household} onChange={(event) => setProfile({ ...profile, household: event.target.value as FamilyProfile["household"] })}>
-                <option value="two-caregivers">함께 양육</option><option value="single-caregiver">한부모 양육</option><option value="expecting">출산 준비</option>
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="region">거주 지역</label>
-              <select id="region" value={profile.region} onChange={(event) => setProfile({ ...profile, region: event.target.value })}>
-                <option value="">선택</option><option>서울</option><option>경기</option><option>인천</option><option>부산</option><option>대구</option><option>광주</option><option>대전</option><option>울산</option><option>세종</option><option>강원</option><option>충북</option><option>충남</option><option>전북</option><option>전남</option><option>경북</option><option>경남</option><option>제주</option>
-              </select>
-            </div>
-          </div>
-
-          {profile.household === "expecting" && (
-            <div className="expecting-field">
-              <label className="field-label" htmlFor="expected-date">출산 예정일</label>
-              <input id="expected-date" type="date" value={profile.expectedDate} onChange={(event) => setProfile({ ...profile, expectedDate: event.target.value })} />
-              <p className="privacy-note">예정일 기준으로 첫만남이용권·부모급여 등 출산 지원을 미리 안내합니다.</p>
-            </div>
-          )}
-
-          <div className="children-field">
-            <div className="children-head">
-              <label className="field-label">자녀 {profile.household === "expecting" ? "(이미 태어난 아이가 있으면)" : ""}</label>
-              <div className="children-count">
-                <button
-                  type="button"
-                  aria-label="자녀 줄이기"
-                  disabled={profile.children.length <= (profile.household === "expecting" ? 0 : 1)}
-                  onClick={() => setProfile({ ...profile, children: profile.children.slice(0, -1) })}
-                >−</button>
-                <span>{profile.children.length}명</span>
-                <button
-                  type="button"
-                  aria-label="자녀 늘리기"
-                  disabled={profile.children.length >= 6}
-                  onClick={() => setProfile({ ...profile, children: [...profile.children, { birthMonth: "" }] })}
-                >+</button>
-              </div>
-            </div>
-            {profile.children.map((child, i) => (
-              <div key={i} className="child-row">
-                <span className="child-label">{i + 1}째</span>
-                <input
-                  type="month"
-                  aria-label={`${i + 1}째 아이 출생 연월`}
-                  value={child.birthMonth}
-                  onChange={(event) => {
-                    const next = profile.children.map((c, j) => (j === i ? { birthMonth: event.target.value } : c));
-                    setProfile({ ...profile, children: next });
-                  }}
-                />
-              </div>
-            ))}
-            {profile.household === "expecting" && profile.children.length === 0 && (
-              <p className="privacy-note">첫 아이 출산 준비 중이시면 위 예정일만 입력하셔도 됩니다.</p>
-            )}
-          </div>
-
-          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않습니다. 등록하면 이 브라우저에 저장되어 새로고침해도 유지됩니다.</p>
-          <button
-            type="button"
-            className="register-button"
-            disabled={!profileReady}
-            onClick={registerProfile}
-          >
-            {profileSaved ? <><CheckCircle2 aria-hidden="true" /> 등록되었습니다</> : <><UserCheck aria-hidden="true" /> 프로필 등록</>}
-          </button>
-          {!profileReady && <p className="privacy-note">거주 지역과 자녀 출생 연월(또는 출산 예정일)을 입력하면 등록할 수 있습니다.</p>}
-        </form>
-
-        <section className="panel priority-panel">
-          <div className="section-title"><div><p className="eyebrow">먼저 확인</p><h2>오늘의 체크리스트</h2></div><ClipboardCheck aria-hidden="true" /></div>
-          <div className="priority-list">
-            <button type="button" onClick={() => navigate("consult")}><MessageSquare aria-hidden="true" /><span><strong>최근 사건 정리</strong><small>기관 답변, 날짜, 금액을 함께 입력하세요.</small></span><ArrowRight aria-hidden="true" /></button>
-            <button type="button" onClick={() => navigate("laws")}><BookOpen aria-hidden="true" /><span><strong>적용 법령 확인</strong><small>내장 자료의 최신성을 공식 출처에서 다시 확인하세요.</small></span><ArrowRight aria-hidden="true" /></button>
-            <button type="button" onClick={() => navigate("documents")}><FileText aria-hidden="true" /><span><strong>받은 문서 정리</strong><small>개인정보를 지운 텍스트에서 쟁점을 찾습니다.</small></span><ArrowRight aria-hidden="true" /></button>
-          </div>
-        </section>
-
+        <div className="today-col today-col-main">
         <section className="panel support-panel">
           <div className="section-title"><div><p className="eyebrow">지원·기한</p><h2>{familyStage} 맞춤</h2></div>{briefingLoading && briefing ? <UpdatingChip /> : <CalendarClock aria-hidden="true" />}</div>
           {!hasProfileInput(profile) ? (
@@ -770,10 +822,10 @@ function TodayView({
                     <span className="support-row-main">
                       <strong>
                         {s.name}
-                        {s.amount_krw > 0 ? ` · ${formatKrw(s.amount_krw)}` : s.amount_description ? ` · ${s.amount_description.split(" ")[0]}` : ""}
+                        {shortAmount(s) ? ` · ${shortAmount(s)}` : ""}
                       </strong>
                       {typeof s.deadline_days_left === "number" && (
-                        <span className="deadline-chip">{s.deadline_days_left === 0 ? "오늘 마감" : `D-${s.deadline_days_left}`}</span>
+                        <span className={ddayClass(s.deadline_days_left)}>{ddayLabel(s.deadline_days_left)}</span>
                       )}
                     </span>
                     <ArrowRight aria-hidden="true" />
@@ -814,8 +866,128 @@ function TodayView({
                 </button>
               ))}
             </div>
-          ) : <p className="empty-copy">상황을 상담하면 근거, 확인 상태, 다음 행동이 여기에 연결됩니다.</p>}
+          ) : (
+            <div className="empty-block">
+              <p className="empty-copy">상황을 상담하면 근거, 확인 상태, 다음 행동이 여기에 연결됩니다.</p>
+              <button type="button" className="text-button" onClick={() => navigate("consult")}>
+                첫 상담 시작하기 <ArrowRight aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </section>
+        </div>
+
+        <div className="today-col today-col-side">
+        <form className="panel family-profile" onSubmit={(event) => event.preventDefault()}>
+          <div className="section-title">
+            <div>
+              <p className="eyebrow">가족 프로필</p>
+              <h2>{familyStage}{profile.region ? ` · ${profile.region}` : ""}</h2>
+            </div>
+            {profileReady && (
+              <button type="button" className="text-button" onClick={() => setEditingProfile((open) => !open)}>
+                {editingProfile ? "접기" : "고치기"}
+              </button>
+            )}
+          </div>
+          {!editingProfile && (
+            <p className="profile-summary">
+              {profile.children.filter((c) => c.birthMonth).length > 0
+                ? `자녀 ${profile.children.filter((c) => c.birthMonth).length}명 · ${profile.household === "single-caregiver" ? "한부모 양육" : "함께 양육"}`
+                : "출산 준비 중"}
+            </p>
+          )}
+          {editingProfile && (<>
+          <div className="form-grid">
+            <div>
+              <label className="field-label" htmlFor="household">가족 상황</label>
+              <select id="household" value={profile.household} onChange={(event) => setProfile({ ...profile, household: event.target.value as FamilyProfile["household"] })}>
+                <option value="two-caregivers">함께 양육</option><option value="single-caregiver">한부모 양육</option><option value="expecting">출산 준비</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="region">거주 지역</label>
+              <select id="region" value={profile.region} onChange={(event) => setProfile({ ...profile, region: event.target.value })}>
+                <option value="">선택</option>{REGIONS.map((region) => <option key={region}>{region}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {profile.household === "expecting" && (
+            <div className="expecting-field">
+              <span className="field-label">출산 예정</span>
+              <YearMonthPicker
+                label="출산 예정"
+                yearFrom={THIS_YEAR}
+                yearTo={THIS_YEAR + 1}
+                value={profile.expectedDate.slice(0, 7)}
+                onChange={(next) => setProfile({ ...profile, expectedDate: next })}
+              />
+              <p className="privacy-note">예정 월 기준으로 첫만남이용권·부모급여 등 출산 지원을 미리 안내합니다.</p>
+            </div>
+          )}
+
+          <div className="children-field">
+            <div className="children-head">
+              <label className="field-label">자녀 {profile.household === "expecting" ? "(이미 태어난 아이가 있으면)" : ""}</label>
+              <div className="children-count">
+                <button
+                  type="button"
+                  aria-label="자녀 줄이기"
+                  disabled={profile.children.length <= (profile.household === "expecting" ? 0 : 1)}
+                  onClick={() => setProfile({ ...profile, children: profile.children.slice(0, -1) })}
+                >−</button>
+                <span>{profile.children.length}명</span>
+                <button
+                  type="button"
+                  aria-label="자녀 늘리기"
+                  disabled={profile.children.length >= 6}
+                  onClick={() => setProfile({ ...profile, children: [...profile.children, { birthMonth: "" }] })}
+                >+</button>
+              </div>
+            </div>
+            {profile.children.map((child, i) => (
+              <div key={i} className="child-row">
+                <span className="child-label">{i + 1}째</span>
+                <YearMonthPicker
+                  label={`${i + 1}째 아이 출생`}
+                  yearFrom={THIS_YEAR - 18}
+                  yearTo={THIS_YEAR}
+                  value={child.birthMonth}
+                  onChange={(next) => {
+                    const children = profile.children.map((c, j) => (j === i ? { birthMonth: next } : c));
+                    setProfile({ ...profile, children });
+                  }}
+                />
+              </div>
+            ))}
+            {profile.household === "expecting" && profile.children.length === 0 && (
+              <p className="privacy-note">첫 아이 출산 준비 중이시면 위 예정일만 입력하셔도 됩니다.</p>
+            )}
+          </div>
+
+          <p className="privacy-note"><ShieldCheck aria-hidden="true" /> 이름과 정확한 주소는 받지 않습니다. 저장하면 계정에 남아 다른 기기에서도 그대로 보입니다.</p>
+          <button
+            type="button"
+            className="register-button"
+            disabled={!profileReady}
+            onClick={registerProfile}
+          >
+            {profileSaved ? <><CheckCircle2 aria-hidden="true" /> 저장했습니다</> : <><UserCheck aria-hidden="true" /> 가족 정보 저장</>}
+          </button>
+          {!profileReady && <p className="privacy-note">거주 지역과 자녀 출생 연월(또는 출산 예정일)을 입력하면 저장할 수 있습니다.</p>}
+          </>)}
+        </form>
+
+        <section className="panel priority-panel">
+          <div className="section-title"><div><p className="eyebrow">먼저 확인</p><h2>오늘의 체크리스트</h2></div><ClipboardCheck aria-hidden="true" /></div>
+          <div className="priority-list">
+            <button type="button" onClick={() => navigate("consult")}><MessageSquare aria-hidden="true" /><span><strong>최근 사건 정리</strong><small>기관 답변, 날짜, 금액을 함께 입력하세요.</small></span><ArrowRight aria-hidden="true" /></button>
+            <button type="button" onClick={() => navigate("laws")}><BookOpen aria-hidden="true" /><span><strong>적용 법령 확인</strong><small>내장 자료의 최신성을 공식 출처에서 다시 확인하세요.</small></span><ArrowRight aria-hidden="true" /></button>
+            <button type="button" onClick={() => navigate("documents")}><FileText aria-hidden="true" /><span><strong>받은 문서 정리</strong><small>개인정보를 지운 텍스트에서 쟁점을 찾습니다.</small></span><ArrowRight aria-hidden="true" /></button>
+          </div>
+        </section>
+        </div>
       </section>
     </div>
   );
@@ -852,7 +1024,7 @@ function SupportView({ profile, familyStage }: { profile: FamilyProfile; familyS
                   <div className="support-card-head">
                     <h3>{s.name}</h3>
                     {typeof s.deadline_days_left === "number" && (
-                      <span className="deadline-chip">{s.deadline_days_left === 0 ? "오늘 마감" : `신청 D-${s.deadline_days_left}`}</span>
+                      <span className={ddayClass(s.deadline_days_left)}>{ddayLabel(s.deadline_days_left)}</span>
                     )}
                   </div>
                   {(s.amount_description || s.amount_krw > 0) && (
@@ -1042,7 +1214,9 @@ function ConsultView({
               : <span className={`status-badge ${profileReady ? "tone-good" : "tone-neutral"}`}>{familyStage}</span>}
           </div>
           {!profileReady && <button type="button" className="profile-reminder" onClick={() => navigate("today")}><AlertCircle aria-hidden="true" /> 가족 프로필을 입력하면 결과 범위를 좁힐 수 있습니다.</button>}
-          {historyRestricted && <p className="restricted-note"><Lock aria-hidden="true" /> 이전 상담 기록은 운영자 인증 후 조회할 수 있습니다.</p>}
+          {/* 로그인한 부모는 /api/me/history 로 본인 기록을 그대로 본다.
+              이 안내는 로그인이 풀렸을 때만 뜬다 — 예전처럼 운영자 토큰을 요구하지 않는다. */}
+          {historyRestricted && <p className="restricted-note"><Lock aria-hidden="true" /> 로그인이 풀렸습니다. 다시 로그인하시면 이전 상담이 그대로 보입니다.</p>}
           <div className="select-list compact">
             {sessions.map((session) => (
               <div className={`select-row-wrap ${selectedSession?.id === session.id ? "is-selected" : ""}`} key={session.id}>
@@ -1163,10 +1337,6 @@ function ConsultationResult({ session, composer }: { session: ConsultationSessio
   );
 }
 
-const KRW = new Intl.NumberFormat("ko-KR");
-function formatKrw(value: unknown): string | null {
-  return typeof value === "number" && Number.isFinite(value) ? `${KRW.format(value)}원` : null;
-}
 
 /** Refund/settlement calculation. The backend computes it exactly (e.g. 641,667원); this
  * renders the figure and its formula, or explains which facts are missing so the user

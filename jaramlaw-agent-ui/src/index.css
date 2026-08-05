@@ -1,32 +1,103 @@
 @import "tailwindcss";
+/* Pretendard — 지금까지 font-family에 이름만 적혀 있고 실제로는 로드되지 않아
+   Noto Sans KR로 떨어지고 있었다. npm 패키지로 self-host 한다 (CDN 의존 없음,
+   SIL OFL). dynamic-subset은 한글 자모 범위를 92개로 쪼개 실제 쓰는 조각만 받는다. */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   자람법 Design System v0.1 (base: KRDS)
+   원칙 3: ① 색은 행위다 ② 깊이는 보더로 ③ 접근성은 기본 동작
+   ───────────────────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
+
+  /* Primary — #176c5c 를 50단계에 고정한 11단계 램프 */
+  --primary-5:  #e3f2ed;
+  --primary-10: #c9e6de;
+  --primary-20: #9fd2c6;
+  --primary-30: #6bb8a7;
+  --primary-40: #2f9581;
+  --primary-50: #176c5c;
+  --primary-60: #0d574a;
+  --primary-70: #094239;
+  --primary-80: #06302a;
+
+  /* 별칭 — 기존 코드가 쓰던 이름을 램프에 연결한다 (일괄 치환 대신 매핑) */
+  --brand: var(--primary-50);
+  --brand-strong: var(--primary-60);
+  --brand-soft: var(--primary-5);
+
+  /* Ink & Surface */
   --ink-950: #17231f;
   --ink-800: #293a34;
   --ink-650: #4d6059;
-  --ink-500: #687a74;
+  /* 🔴 디자인 시스템 표는 --ink-500 을 #687a74 (4.5:1) 로 적어 두었지만 그 값은
+     흰 배경 기준이다. 세이지 캔버스 위에서는 4.02:1 로 떨어져 WCAG AA 를 못 넘겼다.
+     같은 색상각을 유지한 채 흰 배경 5.17 이 되는 지점까지 어둡게 잡았다.
+     🔴 이후 캔버스를 #dee7e2 로 더 내렸으므로 이 색은 **캔버스 위에서 쓰지 않는다**
+     (그 위에서는 4.10:1). 흰 면·surface-soft 전용이다. */
+  --ink-500: #5f716b;
   --line: #d6dfdb;
   --line-strong: #b6c6bf;
   --surface: #ffffff;
   --surface-soft: #f3f6f4;
   --surface-muted: #e8efeb;
-  --canvas: #eef2ef;
-  --brand: #176c5c;
-  --brand-strong: #0d574a;
-  --brand-soft: #e3f2ed;
-  --info: #246b91;
-  --info-soft: #e8f2f7;
-  --warning: #9a5b16;
-  --warning-soft: #fff3dd;
+  /* 🔴 캔버스 (2026-08-04 사용자 요청으로 시스템 값에서 이탈).
+     디자인 시스템은 #eef2ef 를 지정하지만 그 값은 흰 카드와 1.09:1 이라 — 시스템이
+     §1.2 에 스스로 적어둔 수치다 — 카드가 배경에서 떠 보이지 않는다. 보더를 필수로
+     둬도 "면"이 안 갈려서 어디를 봐야 하는지가 안 생긴다.
+     흰색 대비를 1.26:1 로 벌려 흰 면(집중 영역)이 실제로 앞으로 나오게 한다.
+     본문 텍스트 대비는 오히려 좋아진다 (ink-950 12.8 / ink-800 9.5 / ink-650 5.3).
+     단 ink-500 은 이 캔버스 위에서 4.10 으로 떨어지므로 캔버스 위에서는 쓰지 않는다. */
+  --canvas: #dee7e2;
+
+  /* Semantic — KRDS 원색보다 채도를 낮춘 자람법 톤 */
   --danger: #a13b4b;
   --danger-soft: #fbecef;
-  --focus: #1f69b3;
+  --warning: #9a5b16;
+  --warning-soft: #fff3dd;
+  --info: #246b91;
+  --info-soft: #e8f2f7;
+  --success: #2f6b30;
+  --success-soft: #eaf3ea;
+
+  /* Focus — 브랜드 녹색 표면 위에서는 흰 내부 링을 하나 더 깐다 */
+  --focus-ring: 0 0 0 4px var(--primary-50);
+  --focus-ring-on-brand: 0 0 0 2px #ffffff, 0 0 0 6px var(--primary-50);
+
+  /* Depth — 그림자는 드롭다운/모달에만. 그 외는 전부 보더 */
   --shadow-1: 0 1px 2px rgba(16, 35, 29, 0.06);
   --shadow-2: 0 12px 32px rgba(16, 35, 29, 0.09);
+
+  /* Radius */
+  --radius-xs: 2px;
   --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 1000px;
+
+  /* 컴포넌트 높이 5단계 (버튼·입력·셀렉트 공통) */
+  --h-xs: 32px;
+  --h-sm: 40px;
+  --h-md: 48px;
+  --h-lg: 56px;
+  --h-xl: 64px;
+
   --header-height: 64px;
+  --content-max: 1200px;
+  --reading-max: 720px;
+  /* 페이지 컨테이너(--content-max) 안쪽 좌우 여백. 카드/패널의 실제 왼쪽 모서리는
+     `--content-max` 가 아니라 **이 값만큼 안쪽**이다 (1440 뷰포트 실측 x=129).
+     🔴 `.landing`·`.main-content` 는 padding 으로, `.parent-tabs` 는 형제라서 폭 계산에
+     직접 빼서 쓴다 — 숫자를 각자 박아두면 한쪽만 바뀔 때 조용히 어긋나므로 토큰 공유. */
+  --content-inset: 16px;
+
+  /* 타이포 스케일 배수. 헤더의 글자 크기 조절 컨트롤은 제거했고(2026-08-04 사용자 요청)
+     지금은 1로 고정된다. 변수를 지우지 않는 이유는 타이포 선언 134곳이 여기에 걸려
+     있어서다 — 1이면 그대로 디자인 시스템의 px 값이 된다. */
+  --font-scale: 1;
+  --text-base: calc(17px * var(--font-scale));
 }
 
 * {
@@ -44,10 +115,15 @@ body {
   margin: 0;
   color: var(--ink-950);
   background: var(--canvas);
-  font-family: "Pretendard Variable", "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
-  font-size: 15px;
-  line-height: 1.55;
+  font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  /* 본문 17px — 저시력·노안 보호자가 1차 사용자군이다 (16px 아님) */
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 1.5;
 }
+
+/* 굵기는 400과 700 두 단계만. Medium(500/600)을 쓰지 않는다. */
+strong, b, th, h1, h2, h3, h4 { font-weight: 700; }
 
 button,
 input,
@@ -61,40 +137,72 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 모든 인터랙티브 요소에 4px focus ring — 예외 없음 */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
-  outline: 3px solid rgba(31, 105, 179, 0.32);
-  outline-offset: 2px;
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
+/* 브랜드 녹색 표면 위에서는 녹색 halo가 보이지 않는다 → 흰 내부 링 추가 */
+.primary-button:focus-visible,
+.check-region-grid button.is-selected:focus-visible {
+  box-shadow: var(--focus-ring-on-brand);
+}
+
+/* 비활성은 행위가 없는 상태다 — 브랜드색을 희석하지 말고 중립 회색으로 뺀다 */
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.58;
+  opacity: 1;
+  background: var(--surface-muted);
+  color: var(--ink-500);
+  border-color: var(--line);
 }
 
 input,
 textarea,
 select {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--h-lg);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   color: var(--ink-950);
   background: var(--surface);
-  padding: 0.72rem 0.8rem;
+  padding: 0 16px;
+}
+
+select {
+  border-radius: var(--radius-md);
+  padding: 0 48px 0 16px;
 }
 
 textarea {
   min-height: 132px;
+  padding: 12px 16px;
   resize: vertical;
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border: 2px solid var(--danger);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-muted);
+  color: var(--ink-500);
+  border-color: var(--line);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #778881;
+  color: var(--ink-650);
 }
 
 svg {
@@ -110,18 +218,14 @@ p {
   margin: 0;
 }
 
-h1 {
-  font-size: clamp(1.35rem, 2vw, 2rem);
-  line-height: 1.25;
-}
+/* Typography scale — PC / Mobile, 전부 line-height 1.5 */
+h1 { font-size: calc(32px * var(--font-scale)); line-height: 1.35; }
+h2 { font-size: calc(24px * var(--font-scale)); line-height: 1.4; }
+h3 { font-size: calc(19px * var(--font-scale)); line-height: 1.45; }
 
-h2 {
-  font-size: 1.06rem;
-  line-height: 1.35;
-}
-
-h3 {
-  font-size: 0.92rem;
+@media (max-width: 767px) {
+  h1 { font-size: calc(26px * var(--font-scale)); }
+  h2 { font-size: calc(22px * var(--font-scale)); }
 }
 
 .app-shell {
@@ -156,9 +260,9 @@ h3 {
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.96);
-  padding: 0.55rem max(1rem, calc((100vw - 1440px) / 2));
-  backdrop-filter: blur(16px);
+  /* 반투명·blur 금지 — 헤더는 불투명 고정 (디자인 시스템 §4.8) */
+  background: var(--surface);
+  padding: 0 max(16px, calc((100vw - var(--content-max)) / 2));
 }
 
 .brand-button,
@@ -185,24 +289,13 @@ h3 {
 }
 
 .brand-button strong {
-  font-size: 1rem;
+  font-size: calc(15px * var(--font-scale));
 }
 
 .brand-button small {
   color: var(--ink-650);
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
   white-space: nowrap;
-}
-
-.brand-mark {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-md);
-  color: white;
-  background: var(--brand);
-  box-shadow: var(--shadow-1);
 }
 
 .header-actions,
@@ -215,7 +308,7 @@ h3 {
 
 .engine-status {
   color: var(--ink-650);
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
 }
 
@@ -231,7 +324,7 @@ h3 {
   min-height: 40px;
   border-left: 1px solid var(--line);
   padding: 0.45rem 0 0.45rem 0.8rem;
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 750;
 }
 
@@ -239,7 +332,14 @@ h3 {
   position: sticky;
   top: var(--header-height);
   z-index: 50;
-  width: min(1440px, calc(100% - 2rem));
+  /* 탭 바는 `.main-content` 의 **형제**라 그 안쪽 패딩을 물려받지 못한다. 그래서
+     컨테이너 폭에서 좌우 inset 을 직접 빼야 패널 모서리와 같은 x 에 선다.
+     ⚠️ `min(1440px, 100% - 2rem)` 이던 것을 고친 것이다 — 본문만 1200 으로 좁히고
+        여기를 두면 탭 바만 화면 밖으로 튀어나온 것처럼 보인다 (2026-08-05 사용자 지적). */
+  width: min(
+    calc(var(--content-max) - 2 * var(--content-inset)),
+    calc(100% - 2 * var(--content-inset))
+  );
   display: flex;
   gap: 0.25rem;
   margin: 0.75rem auto 0;
@@ -266,11 +366,11 @@ h3 {
   justify-content: center;
   gap: 0.45rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-650);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 750;
 }
 
@@ -287,57 +387,71 @@ h3 {
   background: var(--brand-soft);
 }
 
-.main-content,
+/* 부모 화면 본문 — 랜딩(`.landing`)과 **같은 컨테이너 수식**을 쓴다 (2026-08-05).
+ *
+ * 이전에는 여기만 1440px 이라 헤더·푸터·랜딩(전부 --content-max=1200)보다 넓었다.
+ * 1440 뷰포트 실측: 랜딩 카드는 x=129 에서 시작해 1168 폭인데 홈 본문은 x=16 에서
+ * 1393 폭이었다 — 헤더 로고(x=120) 기준선과도 어긋나 로그인 전후로 "페이지마다
+ * 영역이 다르다"로 보였다.
+ *
+ * 🔴 폭과 좌우 패딩이 **둘 다** `.landing` 과 같아야 한다. 폭만 맞추면 랜딩의
+ *    16px 안쪽 여백만큼 카드 모서리가 어긋난다. */
+.main-content {
+  width: min(var(--content-max), 100%);
+  flex: 1;
+  margin: 0.75rem auto 2rem;
+  padding-inline: var(--content-inset);
+}
+
+/* 운영자 콘솔은 의도적 예외 — metric-grid·admin-columns·admin-review-layout 이
+   다중 열이라 1200 으로 좁히면 표가 눌린다. 부모 화면과 다른 surface 이고
+   헤더/푸터 기준선을 공유할 이유도 적다.
+   ⚠️ 실제 폭은 이 선언이 아니라 아래쪽 `.admin-shell { max-width: 1280px }` 가
+      결정한다(1440 뷰포트 실측 1280px). 여기 1440 은 상한일 뿐이다. */
 .admin-shell {
   width: min(1440px, calc(100% - 2rem));
   flex: 1;
   margin: 0.75rem auto 2rem;
 }
 
-.briefing-hero {
-  position: relative;
-  min-height: 245px;
+/* 홈 첫 줄 — 인사 + 행동. 사진 히어로(245px, 랜딩 재탕)를 대체한다 (2026-08-05).
+   로그인한 부모에게 필요한 건 설득이 아니라 "지금 뭘 하면 되는가"라서,
+   상단은 한 줄로 줄이고 공간을 아래 실데이터 패널에 넘긴다. */
+.home-brief {
   display: flex;
   align-items: center;
-  overflow: hidden;
+  justify-content: space-between;
+  gap: 1.5rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface) url("/assets/jaramlaw-parent-guidance-hero.png") center right / cover no-repeat;
+  background: var(--surface);
   box-shadow: var(--shadow-1);
+  padding: 1.5rem 1.75rem;
 }
 
-.briefing-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: min(68%, 820px);
-  background: rgba(248, 250, 248, 0.94);
-}
-
-.briefing-hero > div {
-  position: relative;
-  width: min(650px, 62%);
+.home-brief-copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 2rem;
+  gap: 0.4rem;
 }
 
-.briefing-hero h1 {
-  max-width: 19ch;
-  font-size: clamp(1.7rem, 3vw, 2.7rem);
+.home-brief h1 {
+  font-size: calc(26px * var(--font-scale));
+  line-height: 1.35;
 }
 
-.briefing-hero p {
-  max-width: 60ch;
+.home-brief p {
   color: var(--ink-650);
+  max-width: 62ch;
 }
+
+.home-brief .primary-button { flex: 0 0 auto; }
 
 .hero-kicker,
 .eyebrow {
   color: var(--brand);
-  font-size: 0.74rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
 }
 
@@ -364,7 +478,7 @@ h3 {
 }
 .stage-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface-soft);
   padding: 0.85rem 0.9rem;
   display: flex;
@@ -377,7 +491,7 @@ h3 {
   gap: 0.5rem;
 }
 .stage-head h3 {
-  font-size: 0.98rem;
+  font-size: calc(15px * var(--font-scale));
   margin: 0;
 }
 .stage-head svg {
@@ -391,10 +505,10 @@ h3 {
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--brand);
   color: #fff;
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
   flex: 0 0 auto;
 }
@@ -408,14 +522,14 @@ h3 {
 }
 .stage-card li {
   color: var(--ink-650);
-  font-size: 0.86rem;
+  font-size: calc(13px * var(--font-scale));
 }
 .how-tagline {
   margin: 0.85rem 0 0;
   padding-top: 0.75rem;
   border-top: 1px solid var(--line);
   color: var(--ink-650);
-  font-size: 0.95rem;
+  font-size: calc(15px * var(--font-scale));
 }
 .how-tagline strong {
   color: var(--brand);
@@ -432,10 +546,10 @@ h3 {
   display: inline-block;
   margin-left: 0.4rem;
   padding: 0.1rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--brand);
   color: #fff;
-  font-size: 0.68rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
   vertical-align: middle;
   white-space: nowrap;
@@ -482,7 +596,7 @@ h3 {
   flex-wrap: wrap;
 }
 .support-row-main strong {
-  font-size: 0.9rem;
+  font-size: calc(15px * var(--font-scale));
 }
 .support-row > svg {
   width: 1rem;
@@ -503,7 +617,7 @@ h3 {
   background: transparent;
   color: var(--brand);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: calc(13px * var(--font-scale));
   cursor: pointer;
 }
 .more-button:hover {
@@ -517,13 +631,15 @@ h3 {
 /* 지원 탭: 상세 지원 카드 */
 .support-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* auto-fill 은 카드가 2장이어도 빈 트랙을 만들어 오른쪽 절반을 비워 놨다.
+     auto-fit 은 빈 트랙을 접어 카드가 폭을 채운다. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
 .support-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface-soft);
   padding: 1rem;
   display: flex;
@@ -537,7 +653,7 @@ h3 {
   gap: 0.5rem;
 }
 .support-card-head h3 {
-  font-size: 1rem;
+  font-size: calc(15px * var(--font-scale));
   margin: 0;
 }
 .support-card-head .deadline-chip {
@@ -547,12 +663,12 @@ h3 {
   margin: 0;
   color: var(--brand);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: calc(15px * var(--font-scale));
 }
 .support-cond {
   margin: 0;
   color: var(--ink-650);
-  font-size: 0.86rem;
+  font-size: calc(13px * var(--font-scale));
   line-height: 1.45;
 }
 .support-link {
@@ -565,7 +681,7 @@ h3 {
   border-radius: var(--radius-md);
   background: var(--brand);
   color: #fff;
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
   text-decoration: none;
 }
@@ -582,12 +698,29 @@ h3 {
   grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
   gap: 0.75rem;
   margin-top: 0.75rem;
+  align-items: start;
+}
+
+/* 열 래퍼 — 패널을 grid 에 직접 자동 배치하면 행 정렬 때문에 짧은 패널(접힌 프로필)
+   아래에 행 높이만큼 죽은 공백이 생긴다. 열 안에서 위로 쌓으면 구조적으로 사라진다. */
+.today-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recent-panel .empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .panel {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-1);
   padding: 1rem;
@@ -622,10 +755,10 @@ h3 {
   flex-shrink: 0;
   padding: 0.4rem 0.7rem;
   border: 1px solid var(--line, #d8dee9);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--ink-650, #4a5568);
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -648,10 +781,10 @@ h3 {
   gap: 0.4rem;
   margin: 0 0 0.5rem;
   padding: 0.5rem 0.7rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted, #eef3fb);
   color: var(--accent, #3b6ef6);
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 500;
 }
 
@@ -669,9 +802,9 @@ h3 {
   gap: 0.35rem;
   flex: 0 0 auto;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.55rem;
-  font-size: 0.7rem;
+  font-size: calc(13px * var(--font-scale));
   font-style: normal;
   font-weight: 800;
   white-space: nowrap;
@@ -729,17 +862,17 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
 }
 .children-count button {
   width: 1.6rem;
   height: 1.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--line);
   background: var(--surface-soft);
   color: var(--brand);
-  font-size: 1rem;
+  font-size: calc(15px * var(--font-scale));
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -761,7 +894,7 @@ h3 {
 .child-label {
   flex: 0 0 2.6rem;
   color: var(--ink-650);
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
 }
 .child-row input { flex: 1; }
@@ -769,7 +902,7 @@ h3 {
 .field-label {
   display: block;
   color: var(--ink-800);
-  font-size: 0.76rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
   margin: 0.55rem 0 0.3rem;
 }
@@ -786,7 +919,7 @@ h3 {
   color: var(--ink-650);
   background: var(--surface-soft);
   padding: 0.7rem;
-  font-size: 0.76rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .privacy-note {
@@ -836,7 +969,7 @@ h3 {
 .source-notice span,
 .audit-row small {
   color: var(--ink-650);
-  font-size: 0.7rem;
+  font-size: calc(13px * var(--font-scale));
   overflow-wrap: anywhere;
 }
 
@@ -858,7 +991,7 @@ h3 {
 .document-section p,
 .document-section li {
   color: var(--ink-650);
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .dataset-strip,
@@ -870,7 +1003,7 @@ h3 {
   margin-top: 0.8rem;
   padding-top: 0.7rem;
   color: var(--ink-650);
-  font-size: 0.75rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .dataset-strip strong {
@@ -887,10 +1020,10 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0.58rem 0.85rem;
   cursor: pointer;
-  font-size: 0.79rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
 }
 
@@ -913,12 +1046,12 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 0.6rem 0.9rem;
   border: 1px solid #1f5f82;
   color: #fff;
   background: var(--info, #246b91);
-  font-size: 0.9rem;
+  font-size: calc(15px * var(--font-scale));
   font-weight: 800;
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
@@ -969,7 +1102,7 @@ h3 {
   align-items: center;
   gap: 0.3rem;
   margin-top: 0.65rem;
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
   cursor: pointer;
 }
@@ -1014,7 +1147,7 @@ h3 {
   padding: 0.65rem;
   text-align: left;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .prompt-options,
@@ -1028,18 +1161,18 @@ h3 {
 .prompt-options button {
   min-height: 34px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: var(--ink-650);
   background: var(--surface-soft);
   padding: 0.35rem 0.65rem;
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 750;
 }
 
 .form-status {
   color: var(--ink-650);
-  font-size: 0.75rem;
+  font-size: calc(13px * var(--font-scale));
   overflow-wrap: anywhere;
 }
 
@@ -1077,12 +1210,12 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .select-row em {
   color: var(--brand-strong);
-  font-size: 0.66rem;
+  font-size: calc(13px * var(--font-scale));
   font-style: normal;
   font-weight: 800;
 }
@@ -1124,12 +1257,12 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .select-row-main small {
   color: var(--ink-650);
-  font-size: 0.68rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .select-row-delete {
@@ -1241,7 +1374,7 @@ h3 {
 .chat-start-hint {
   margin: 0 0 0.9rem;
   color: var(--ink-650, #4a5568);
-  font-size: 0.9rem;
+  font-size: calc(15px * var(--font-scale));
   line-height: 1.5;
 }
 
@@ -1261,7 +1394,7 @@ h3 {
 .message-user p,
 .message-agent p {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 0.75rem 0.85rem;
   white-space: pre-wrap;
 }
@@ -1279,7 +1412,7 @@ h3 {
 /* 봇 markdown 답변 버블 — 헤더/목록/링크/인용을 실제로 렌더 (기호 노출 방지). */
 .message-agent .md-body {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 0.75rem 0.85rem;
   background: var(--surface-soft);
   display: flex;
@@ -1298,12 +1431,12 @@ h3 {
   margin: 0.35rem 0 0;
   line-height: 1.3;
 }
-.md-body .md-h1 { font-size: 1.05rem; }
-.md-body .md-h2 { font-size: 1rem; }
-.md-body .md-h3 { font-size: 0.96rem; }
+.md-body .md-h1 { font-size: calc(17px * var(--font-scale)); }
+.md-body .md-h2 { font-size: calc(15px * var(--font-scale)); }
+.md-body .md-h3 { font-size: calc(15px * var(--font-scale)); }
 .md-body .md-h4,
 .md-body .md-h5,
-.md-body .md-h6 { font-size: 0.9rem; }
+.md-body .md-h6 { font-size: calc(15px * var(--font-scale)); }
 /* .message-agent strong 의 0.7rem 회색(발신자명용)을 마크다운 볼드에서 되돌린다. */
 .md-body strong {
   color: inherit;
@@ -1342,7 +1475,7 @@ h3 {
 .message-user time,
 .message-agent time {
   color: var(--ink-650);
-  font-size: 0.7rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .result-grid {
@@ -1379,11 +1512,11 @@ h3 {
 
 .signal-row small {
   color: var(--ink-650);
-  font-size: 0.68rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .signal-row em {
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
   font-style: normal;
   font-weight: 800;
 }
@@ -1405,7 +1538,7 @@ h3 {
 .reason-box p,
 .reason-box span {
   color: var(--ink-650);
-  font-size: 0.76rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .reason-box span {
@@ -1418,7 +1551,7 @@ h3 {
   margin: 0.8rem 0 0;
   padding-left: 1.25rem;
   color: var(--ink-650);
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .metric-grid {
@@ -1450,14 +1583,14 @@ h3 {
 .metric span {
   overflow: hidden;
   color: var(--ink-650);
-  font-size: 0.66rem;
+  font-size: calc(13px * var(--font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .metric strong {
   overflow-wrap: anywhere;
-  font-size: 0.9rem;
+  font-size: calc(15px * var(--font-scale));
 }
 
 .verification-receipt > div {
@@ -1472,7 +1605,7 @@ h3 {
   background: var(--surface-soft);
   margin-top: 0.85rem;
   padding: 0.7rem;
-  font-size: 0.73rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .tool-layout {
@@ -1530,7 +1663,7 @@ h3 {
 
 .evidence-list dt {
   color: var(--brand);
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
 }
 
@@ -1560,7 +1693,7 @@ h3 {
 
 .upload-zone span {
   color: var(--ink-650);
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .document-textarea {
@@ -1601,7 +1734,7 @@ h3 {
   color: var(--ink-650);
   background: var(--surface);
   padding: 0.25rem 0.45rem;
-  font-size: 0.68rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .admin-shell {
@@ -1635,7 +1768,7 @@ h3 {
 
 .auth-panel p {
   color: var(--ink-650);
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .auth-panel .primary-button {
@@ -1678,7 +1811,7 @@ h3 {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  font-size: 0.76rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .approval-box input {
@@ -1714,7 +1847,7 @@ h3 {
   max-width: 180px;
   overflow: hidden;
   color: var(--ink-500);
-  font-size: 0.67rem;
+  font-size: calc(13px * var(--font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1745,7 +1878,7 @@ h3 {
 .verified-review p,
 .verified-review span {
   color: var(--ink-650);
-  font-size: 0.76rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 .rating-field {
@@ -1780,7 +1913,7 @@ h3 {
 
 .star-rating span {
   color: var(--ink-650);
-  font-size: 0.75rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 800;
   margin-left: 0.35rem;
 }
@@ -1801,7 +1934,7 @@ h3 {
 .mono-output {
   min-height: 105px;
   font-family: ui-monospace, "Cascadia Code", monospace;
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
   word-break: break-all;
 }
 
@@ -1838,7 +1971,7 @@ h3 {
 
 .empty-copy {
   color: var(--ink-650);
-  font-size: 0.78rem;
+  font-size: calc(13px * var(--font-scale));
   padding: 0.6rem 0;
 }
 
@@ -1867,7 +2000,7 @@ h3 {
   flex-direction: column;
   gap: 0.55rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--radius-lg);
   padding: 0.85rem 0.95rem;
   background: var(--surface, #fff);
 }
@@ -1877,7 +2010,7 @@ h3 {
 }
 .skeleton-line {
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: linear-gradient(90deg, var(--surface-soft, #eef1f5) 25%, var(--line, #e2e7ee) 37%, var(--surface-soft, #eef1f5) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -1902,10 +2035,10 @@ h3 {
   gap: 0.3rem;
   flex-shrink: 0;
   padding: 0.28rem 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--info-soft, #e8f2f7);
   color: var(--info, #246b91);
-  font-size: 0.74rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
 }
 .updating-chip svg {
@@ -1924,7 +2057,7 @@ h3 {
   color: var(--ink-650);
   background: var(--surface);
   padding: 0.8rem 1rem;
-  font-size: 0.72rem;
+  font-size: calc(13px * var(--font-scale));
 }
 
 @media (max-width: 1100px) {
@@ -1949,44 +2082,41 @@ h3 {
     padding-inline: 0.75rem;
   }
 
+  /* ⚠️ 여기에 .brand-mark { width/height: 36px } 를 되살리지 말 것 — 구 로고(36px
+     녹색 타일)용 규칙이었다. 지금 로고는 텍스트 워드마크인데, flex item 이라
+     블록화되어 고정 크기가 실제로 먹히고, 26px 글자가 36px 상자를 넘쳐 태그라인과
+     겹쳤다 (2026-08-05 모바일 실측). 좁은 화면 축소는 아래 font-size 로만 한다. */
   .brand-mark {
-    width: 36px;
-    height: 36px;
+    font-size: calc(22px * var(--font-scale));
   }
 
   .engine-status {
     display: none;
   }
 
-  .main-content,
+  /* 🔴 좁은 화면에서도 폭을 다시 건드리지 않는다 — `width: 100% - 1rem` 은 좌우
+     8px 여백을 만드는데, 랜딩은 16px 이라 로그인 전후로 또 어긋난다. 위 기본 규칙의
+     `min(--content-max, 100%)` + `padding-inline: 16px` 가 좁은 화면에서 그대로
+     16px 거터가 되므로 여기서는 위쪽 여백만 조정한다. */
+  .main-content {
+    margin-top: 0.5rem;
+  }
+
   .admin-shell {
     width: min(100% - 1rem, 1440px);
     margin-top: 0.5rem;
   }
 
-  .briefing-hero {
-    min-height: 210px;
-    background-position: 68% center;
+  /* 좁은 화면에서는 인사 바를 세로로 쌓고 CTA 를 전폭으로 편다 */
+  .home-brief {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.25rem;
   }
 
-  .briefing-hero::before {
-    width: 100%;
-    background: rgba(248, 250, 248, 0.88);
-  }
-
-  .briefing-hero > div {
-    width: 100%;
-    padding: 1rem;
-  }
-
-  .briefing-hero h1 {
-    max-width: 24ch;
-    font-size: 1.55rem;
-  }
-
-  .briefing-hero p {
-    max-width: 46ch;
-    font-size: 0.82rem;
+  .home-brief h1 {
+    font-size: calc(22px * var(--font-scale));
   }
 
   .consult-layout,
@@ -2005,9 +2135,9 @@ h3 {
 }
 
 @media (max-width: 640px) {
-  body {
-    font-size: 14px;
-  }
+  /* 모바일에서 본문을 14px 로 내리던 오버라이드를 제거했다. 디자인 시스템의
+     Body md 는 PC·모바일 모두 17px 이고, 저시력·노안 보호자가 1차 사용자군이라
+     작은 화면에서 더 줄이는 것은 방향이 반대다. */
 
   .parent-tabs {
     position: fixed;
@@ -2028,7 +2158,7 @@ h3 {
     min-height: 50px;
     flex-direction: column;
     gap: 0.1rem;
-    font-size: 0.67rem;
+    font-size: calc(13px * var(--font-scale));
   }
 
   .main-content {
@@ -2037,19 +2167,11 @@ h3 {
 
   .brand-button small,
   .operator-link {
-    font-size: 0.68rem;
+    font-size: calc(13px * var(--font-scale));
   }
 
   .operator-link {
     padding-left: 0.5rem;
-  }
-
-  .briefing-hero {
-    min-height: 235px;
-  }
-
-  .briefing-hero p {
-    max-width: 34ch;
   }
 
   .today-grid {
@@ -2144,10 +2266,10 @@ h3 {
 }
 .artifact-block h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: calc(15px * var(--font-scale));
 }
 .brief-meta {
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   color: var(--info);
 }
 .draft-card {
@@ -2171,7 +2293,7 @@ h3 {
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   word-break: break-word;
-  font-size: 0.85rem;
+  font-size: calc(13px * var(--font-scale));
   line-height: 1.55;
   max-height: 26rem;
   overflow-y: auto;
@@ -2189,7 +2311,7 @@ h3 {
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   color: var(--ink-650);
-  font-size: 0.8rem;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 700;
   cursor: pointer;
 }
@@ -2214,8 +2336,8 @@ h3 {
   border-color: var(--warning);
   background: var(--warning-soft);
 }
-.calc-card strong { font-size: 1rem; }
-.calc-note { font-size: 0.78rem; color: var(--info); }
+.calc-card strong { font-size: calc(15px * var(--font-scale)); }
+.calc-note { font-size: calc(13px * var(--font-scale)); color: var(--info); }
 .safety-callout {
   display: flex;
   align-items: flex-start;
@@ -2227,7 +2349,7 @@ h3 {
   background: var(--danger-soft);
 }
 .safety-callout strong { display: block; }
-.safety-callout span { font-size: 0.85rem; }
+.safety-callout span { font-size: calc(13px * var(--font-scale)); }
 .case-fields {
   margin: 0.4rem 0 0;
   padding: 0.6rem 0.8rem;
@@ -2237,7 +2359,960 @@ h3 {
 }
 .case-fields legend {
   padding: 0 0.35rem;
-  font-size: 0.82rem;
+  font-size: calc(13px * var(--font-scale));
   color: var(--info);
 }
 .draft-block { display: flex; flex-direction: column; gap: 0.3rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   자람법 Design System — 공통 컴포넌트
+   §4.1 Button / §4.4 Citation·D-day / §4.3 Panel / §4.8 Header
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── §4.1 Button ────────────────────────────────────────────────────────────
+   한 화면에 같은 위계의 Primary 버튼은 하나만. 비활성은 중립 회색. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--h-md);
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: calc(17px * var(--font-scale));
+  font-weight: 400;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background-color 200ms ease-in-out;
+}
+.btn-lg { height: var(--h-lg); }
+.btn-xl { height: var(--h-xl); padding: 0 28px; }
+
+.btn-primary {
+  background: var(--primary-50);
+  color: #ffffff;
+  border-color: var(--primary-50);
+}
+.btn-primary:hover:not(:disabled) { background: var(--primary-60); border-color: var(--primary-60); }
+.btn-primary:active:not(:disabled) { background: var(--primary-70); border-color: var(--primary-70); }
+
+.btn-secondary {
+  background: var(--primary-5);
+  color: var(--primary-60);
+  border-color: var(--primary-50);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--primary-10); }
+
+.btn-tertiary {
+  background: transparent;
+  color: var(--ink-950);
+  border-color: var(--line-strong);
+}
+.btn-tertiary:hover:not(:disabled) { background: var(--surface-soft); }
+
+.btn-text,
+.text-button {
+  height: auto;
+  padding: 8px 4px;
+  border: none;
+  background: none;
+  color: var(--primary-60);
+  font-size: calc(15px * var(--font-scale));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.btn-text:hover,
+.text-button:hover { color: var(--primary-70); }
+
+/* 기존 클래스명을 시스템 버튼에 연결 — 마크업 전면 치환 대신 매핑 */
+.primary-button,
+.register-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--h-md);
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--primary-50);
+  background: var(--primary-50);
+  color: #ffffff;
+  font-size: calc(17px * var(--font-scale));
+  cursor: pointer;
+}
+.primary-button:hover:not(:disabled),
+.register-button:hover:not(:disabled) { background: var(--primary-60); border-color: var(--primary-60); }
+
+/* ── §4.4 근거 조문 인용 · D-day ────────────────────────────────────────────
+   D-day는 색만으로 구분하지 않는다 — 텍스트에 상태를 반드시 포함한다. */
+.citation-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--primary-5);
+  color: var(--primary-60);
+  padding: 2px 6px;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.dday {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: calc(15px * var(--font-scale));
+  white-space: nowrap;
+}
+.dday-ok { background: var(--primary-5); color: var(--primary-60); }
+.dday-soon { background: var(--warning-soft); color: var(--warning); }
+.dday-past { background: var(--danger-soft); color: var(--danger); }
+
+/* ── §4.3 면책 패널 — 결과가 보이는 모든 화면에 상시 노출 ──────────────────── */
+.disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--info);
+  background: var(--info-soft);
+  color: var(--ink-800);
+  padding: 16px;
+  font-size: calc(15px * var(--font-scale));
+  text-align: left;
+}
+.disclaimer svg { color: var(--info); margin-top: 2px; }
+
+/* ── §4.8 Header 로고 락업 ──────────────────────────────────────────────────
+   로고 타일에만 브랜드 녹색을 쓴다(식별자). 헤더 풀-블리드는 금지. */
+/* 워드마크 — 타일도 심볼도 없다. 국내 육아 서비스 8곳 캡처 결과 절반이 이 형태이고,
+   타일+stroke 아이콘을 쓰는 곳은 한 곳도 없었다 (그건 SaaS 관례다). */
+.brand-word {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  text-align: left;
+  flex: 0 0 auto;
+}
+.brand-mark {
+  font-size: calc(26px * var(--font-scale));
+  /* ⚠️ 디자인 시스템 §2 는 굵기를 400/700 두 단계로 제한하지만 그건 UI 텍스트 규칙이다.
+     로고가 본문 700 과 같은 굵기면 "굵은 글씨"로 읽히지 로고로 읽히지 않는다.
+     참조한 8곳 중 워드마크형(아이사랑·맘큐·자란다)은 전부 본문보다 확실히 굵었다.
+     Pretendard Variable 이라 별도 파일 없이 800 을 낼 수 있다. */
+  font-weight: 800;
+  color: var(--ink-950);
+  /* 자간을 조여 글자 덩어리로 뭉치게 한다 — 낱글자로 흩어지면 그냥 텍스트다 */
+  letter-spacing: -0.035em;
+  /* 좁은 화면에서 "자람 / 법"으로 접히던 것을 막는다. 로고는 줄바꿈되는 순간
+     로고가 아니라 문장이 된다. */
+  white-space: nowrap;
+}
+/* 의미 단위에서 색을 끊는 것이 유일한 개입이다 (자람 / 법) */
+.brand-mark-accent { color: var(--primary-50); }
+.brand-word small {
+  margin-top: 2px;
+  font-size: calc(13px * var(--font-scale));
+  color: var(--ink-650);
+  white-space: nowrap;
+}
+
+.user-chip {
+  font-size: calc(15px * var(--font-scale));
+  color: var(--ink-650);
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+  margin-right: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   랜딩
+   ═══════════════════════════════════════════════════════════════════════════ */
+.app-shell.is-public .app-footer { margin-top: auto; }
+
+.landing {
+  width: min(var(--content-max), 100%);
+  margin: 0 auto;
+  /* 좌우는 --content-inset 공유 — 이 값이 곧 랜딩 카드의 왼쪽 모서리이고,
+     로그인 뒤 화면(.main-content·.parent-tabs)이 맞춰야 할 기준선이다. */
+  padding: 0 var(--content-inset) 80px;
+}
+
+/* 배경 3단 위계 (2026-08-04).
+ *
+ * 이전에는 섹션에 배경이 없어 랜딩 전체가 세이지 한 장이었고, 그 위의 흰 카드는
+ * 캔버스와 1.09:1 이라 (디자인 시스템 §1.2 가 스스로 적어둔 수치) 거의 떠 보이지
+ * 않았다. 바닥이 하나뿐이면 어디를 봐야 하는지가 안 생긴다.
+ *
+ *   --canvas       페이지 바닥 (세이지)
+ *   --surface-soft 읽고 넘어가는 보조 정보
+ *   --surface      🔴 지금 행동해야 하는 영역 — 흰 면 + 1px 보더
+ *
+ * 새 색을 만들지 않고 이미 있는 세 토큰의 "역할"만 정한 것이다. 깊이는 여전히
+ * 보더로 만들고 그림자는 쓰지 않는다. */
+.landing > section {
+  padding: 64px 24px;
+}
+
+/* 집중 영역 — 흰 면으로 띄운다 */
+.landing-about,
+.landing-close {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  margin-top: 24px;
+}
+
+.section-heading {
+  font-size: calc(28px * var(--font-scale));
+  line-height: 1.4;
+  text-align: center;
+}
+.section-sub {
+  margin-top: 8px;
+  text-align: center;
+  color: var(--ink-650);
+  font-size: calc(17px * var(--font-scale));
+}
+
+/* ① 히어로 — Display 는 랜딩에서 한 번만 */
+.landing-hero { text-align: center; padding-top: 80px; }
+.display {
+  font-size: calc(36px * var(--font-scale));
+  line-height: 1.35;
+  letter-spacing: 1px;
+}
+.landing-hero-sub {
+  margin: 20px auto 0;
+  max-width: 44ch;
+  color: var(--ink-650);
+  font-size: calc(19px * var(--font-scale));
+}
+.landing-hero-actions { margin-top: 32px; }
+.landing-hero-meta {
+  margin-top: 20px;
+  color: var(--ink-500);
+  font-size: calc(15px * var(--font-scale));
+}
+
+/* ② 결과 미리보기 */
+.preview-frame {
+  margin: 32px auto 0;
+  max-width: 720px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  /* 흰 패널 안이므로 프레임은 캔버스로 내린다. surface-soft 로 두면 흰 카드와
+     거의 같은 밝기라 카드가 사라진다. */
+  background: var(--canvas);
+  padding: 24px;
+}
+.preview-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 24px;
+  text-align: left;
+}
+/* opacity 로 위계를 만들지 않는다 — 색이 배경과 섞여 대비가 깨진다 (axe 실측 3.52:1).
+   시스템에 있는 수단은 보더와 배경 표면뿐이다. */
+.preview-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.preview-card-head strong { font-size: calc(19px * var(--font-scale)); }
+.preview-amount {
+  margin-top: 8px;
+  font-size: calc(24px * var(--font-scale));
+  font-weight: 700;
+  color: var(--primary-60);
+}
+.preview-cond { margin-top: 8px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+.preview-source { margin-top: 12px; color: var(--ink-500); font-size: calc(13px * var(--font-scale)); }
+
+/* ③ 진입 카드 (§4.3 Life-stage card) */
+.stage-picker {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.stage-pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 112px;
+  /* 오른쪽 52px 는 absolute 화살표의 예약석이다. 24px 균일 패딩이면 모바일 2열의
+     좁은 카드에서 힌트 텍스트가 화살표 밑까지 흘러 서로 붙는다 (2026-08-05 실측). */
+  padding: 24px 52px 24px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.stage-pick strong { font-size: calc(19px * var(--font-scale)); }
+.stage-pick small { color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+/* 화살표는 카드 세로 중앙 고정 — bottom 고정이면 카드 높이(라벨 줄바꿈)에 따라
+   행마다 화살표 높이가 달라져 정렬이 흐트러진다. */
+.stage-pick svg { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--primary-50); }
+.stage-pick:hover { background: var(--surface-soft); border-color: var(--primary-40); }
+
+/* ④ 문제 제기 */
+.missed-grid {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.missed-grid article {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  /* 읽고 넘어가는 정보다 — 흰색은 행동 영역에만 쓴다 */
+  background: var(--surface-soft);
+  padding: 24px;
+}
+.missed-grid h3 { font-size: calc(19px * var(--font-scale)); }
+.missed-grid p { margin-top: 8px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+
+/* ⑤ 단계 흐름 */
+.steps-grid {
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.steps-grid li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  padding: 24px;
+}
+.step-no {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-50);
+  color: #ffffff;
+  font-size: calc(13px * var(--font-scale));
+}
+.steps-grid h3 { margin-top: 12px; font-size: calc(19px * var(--font-scale)); }
+.steps-grid p { margin-top: 8px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+
+.landing-icons {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  color: var(--ink-650);
+  font-size: calc(15px * var(--font-scale));
+}
+.landing-icons span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ⑥ 반복 CTA */
+.landing-close { text-align: center; }
+.landing-close .btn-primary { margin-top: 24px; }
+.landing-close .btn-text { display: block; margin: 12px auto 0; }
+.landing-close .disclaimer { margin: 32px auto 0; max-width: 720px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   진단 위저드 (§4.6) — 읽기 폭 720px
+   ═══════════════════════════════════════════════════════════════════════════ */
+.check-shell {
+  width: min(var(--reading-max), 100%);
+  margin: 0 auto;
+  padding: 32px 16px 80px;
+  display: flex;
+  flex-direction: column;
+  min-height: 60vh;
+}
+
+.check-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.check-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--primary-60);
+  font-size: calc(15px * var(--font-scale));
+  cursor: pointer;
+  padding: 8px 0;
+}
+.check-back svg { width: 1rem; height: 1rem; }
+/* 진행바 영역은 캔버스 위다 — ink-500 은 이 배경에서 4.09:1 로 미달한다 */
+.check-step-counter { color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+.check-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+  overflow: hidden;
+}
+.check-bar span {
+  display: block;
+  height: 100%;
+  background: var(--primary-50);
+  transition: width 400ms ease-in-out;
+}
+
+/* 질문 영역을 흰 면으로 올린다. 진행바·이전 링크는 바깥 캔버스에 남겨 두어
+   "지금 답할 곳"과 "이동 장치"를 시각적으로 분리한다. */
+.check-body {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 40px;
+}
+@media (max-width: 767px) { .check-body { padding: 24px; } }
+
+.check-step { border: none; margin: 0; padding: 0; min-width: 0; }
+.check-step legend { padding: 0; width: 100%; }
+.check-step h1 {
+  font-size: calc(40px * var(--font-scale));
+  line-height: 1.35;
+}
+@media (max-width: 767px) { .check-step h1 { font-size: calc(28px * var(--font-scale)); } }
+
+.check-hint {
+  margin: 12px 0 32px;
+  color: var(--ink-650);
+  font-size: calc(17px * var(--font-scale));
+}
+
+/* §4.3 선택 행 — 실제 radio 위에 얹는다 (div + onClick 금지) */
+.check-options { display: flex; flex-direction: column; gap: 12px; }
+.option-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 20px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  /* 디자인 시스템 §4.3 은 선택 행을 흰색으로 규정하지만 그건 캔버스 위 기준이다.
+     흰 패널 안에서는 흰 행이 사라지므로 한 단계 내린다 — 선택 시 brand-soft 로
+     올라가면서 "고른 것"이 오히려 더 밝아져 위계가 뒤집히지 않는다. */
+  background: var(--surface-soft);
+  font-size: calc(17px * var(--font-scale));
+  cursor: pointer;
+}
+.option-row:hover { background: var(--primary-10); }
+.option-row input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.option-row:has(input:checked) {
+  border: 2px solid var(--primary-50);
+  background: var(--primary-5);
+  padding: 19px 23px;
+}
+.option-row:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.option-check { width: 20px; height: 20px; color: var(--primary-50); visibility: hidden; }
+.option-row:has(input:checked) .option-check { visibility: visible; }
+
+/* ── 연·월 선택 (§4.2 분리형 셀렉트) ────────────────────────────────────────
+   네이티브 month/date 위젯을 걷어낸 자리. 셀렉트 두 개를 나란히 두고 단위(년/월)를
+   화면에 직접 적는다 — 빈 상태가 "----년 ---" 이 아니라 "연도 ▾ 년  월 ▾ 월" 로
+   읽혀서, 무엇을 넣어야 하는지가 화면에 그대로 쓰여 있다. */
+.ym-picker {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  max-width: 420px;
+}
+.ym-field {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+}
+/* 월은 두 자리라 연도보다 좁아도 된다 */
+.ym-field-month { flex: 0 0 40%; }
+
+.ym-field select {
+  width: 100%;
+  height: var(--h-lg);
+  /* 오른쪽은 chevron 자리만 비운다. 단위(년/월)는 옵션 텍스트 안에 있다 —
+     셀렉트 밖에 덧붙였더니 "연도 년" 처럼 겹쳐 읽혔다. */
+  padding: 0 40px 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-950);
+  font-size: calc(17px * var(--font-scale));
+  cursor: pointer;
+  /* 네이티브 화살표를 끄고 우리 chevron 을 깐다 — OS마다 다르게 보이던 원인 */
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%235f716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.ym-field select:hover { border-color: var(--primary-40); }
+
+/* 값이 없을 때는 placeholder 처럼 흐리게 — :has 로 빈 값을 판별한다 */
+.ym-field select:has(option[value=""]:checked) { color: var(--ink-650); }
+
+.ym-picker.is-invalid select { border: 2px solid var(--danger); }
+
+@media (max-width: 480px) {
+  .ym-picker { max-width: none; }
+}
+.check-child-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.check-child-row .ym-picker { flex: 1 1 auto; }
+.check-child-row span { min-width: 40px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+.check-child-actions { display: flex; gap: 20px; }
+
+.check-region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.check-region-grid label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--h-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  font-size: calc(17px * var(--font-scale));
+  cursor: pointer;
+}
+.check-region-grid input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.check-region-grid label:hover { background: var(--primary-10); }
+.check-region-grid label:has(input:checked) {
+  background: var(--primary-50);
+  border-color: var(--primary-50);
+  color: #ffffff;
+}
+.check-region-grid label:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+
+.check-footer { margin-top: 40px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.check-error {
+  color: var(--danger);
+  font-size: calc(15px * var(--font-scale));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   진단 결과
+   ═══════════════════════════════════════════════════════════════════════════ */
+.result-shell { width: min(var(--reading-max), 100%); margin: 0 auto; padding: 32px 16px 80px; }
+.result-head .eyebrow { color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+.result-head h1 {
+  margin: 8px 0 32px;
+  font-size: calc(32px * var(--font-scale));
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-list { list-style: none; margin: 0 0 32px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.result-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 24px;
+}
+.result-item-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.result-item-head strong { font-size: calc(19px * var(--font-scale)); }
+.result-amount { margin-top: 8px; font-size: calc(19px * var(--font-scale)); font-weight: 700; color: var(--primary-60); }
+.result-condition { margin-top: 12px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+.result-channel { margin-top: 4px; color: var(--ink-500); font-size: calc(13px * var(--font-scale)); }
+
+.result-locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--surface-soft);
+  border-style: dashed;
+}
+.result-locked svg { color: var(--ink-500); margin-top: 2px; }
+.result-locked strong { font-size: calc(17px * var(--font-scale)); }
+.result-locked p { margin-top: 4px; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); }
+
+.result-error { margin-bottom: 24px; }
+.result-cta { display: flex; flex-direction: column; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding-top: 32px; }
+.result-cta .btn-primary { width: 100%; }
+.result-shell .disclaimer { margin-top: 24px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   가입 · 로그인
+   ═══════════════════════════════════════════════════════════════════════════ */
+.auth-shell { width: min(480px, 100%); margin: 0 auto; padding: 40px 16px 80px; }
+.auth-card { display: flex; flex-direction: column; gap: 4px; padding: 24px; }
+.auth-card h1 { font-size: calc(24px * var(--font-scale)); }
+.auth-lead { margin: 4px 0 20px; color: var(--ink-650); font-size: calc(17px * var(--font-scale)); }
+.auth-carry {
+  margin-bottom: 20px;
+  padding: 16px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-5);
+  color: var(--ink-950);
+  font-size: calc(15px * var(--font-scale));
+}
+.auth-card input { margin-bottom: 12px; }
+.auth-card .btn-primary { margin-top: 12px; }
+.auth-hint { margin: -8px 0 12px; font-size: calc(15px * var(--font-scale)); color: var(--ink-500); }
+.auth-card .form-status.is-error { color: var(--danger); font-size: calc(15px * var(--font-scale)); }
+.auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.profile-summary { margin-top: 8px; color: var(--ink-650); font-size: calc(17px * var(--font-scale)); }
+
+@media (max-width: 767px) {
+  /* 좌우 0 금지 — about/close 가 흰 카드가 된 뒤로(2026-08-04 배경 위계) 좌우 0 은
+     "여백 절약"이 아니라 텍스트를 카드 보더에 붙이는 일이 됐다 (2026-08-05 실측). */
+  .landing > section { padding: 40px 20px; }
+  /* 히어로 카드는 사진이 카드 면 그 자체여야 한다 — 섹션 공통 패딩이 들어가면
+     카드 위아래에 정체불명의 흰 띠가 생기고 사진이 카드 속 사진처럼 떠 보인다.
+     ⚠️ `.landing > section`(0-1-1)이 클래스 단독(0-1-0)을 이기므로 같은 형태로 쓴다. */
+  .landing > .landing-hero-slider { padding: 0; }
+  /* 고정 height 는 데스크톱의 슬라이드 간 출렁임 방지용이다. 좁은 화면에서는
+     패널이 400px 을 넘는 순간 CTA 버튼이 잘리므로(overflow hidden) 내용이 이긴다. */
+  .hero-slide { height: auto; min-height: 400px; }
+  .landing-hero { padding-top: 40px; }
+  .display { font-size: calc(28px * var(--font-scale)); }
+  .section-heading { font-size: calc(24px * var(--font-scale)); }
+  .stage-picker { grid-template-columns: 1fr 1fr; }
+  .check-region-grid { grid-template-columns: repeat(3, 1fr); }
+  .check-footer .btn-primary,
+  .check-footer .primary-button { width: 100%; }
+  .landing-hero-actions .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-bar span { transition: none; }
+  .btn { transition: none; }
+}
+
+/* 스크린리더 전용 텍스트 — 숫자만 있는 표시에 의미를 붙일 때 쓴다 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── §4.8 Footer ────────────────────────────────────────────────────────────
+   면책 · 운영 주체 · 데이터 출처/갱신일을 상시 노출. 접거나 숨기지 않는다. */
+.app-footer {
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+  /* 캔버스 위이므로 ink-500 을 쓰지 않는다 (새 캔버스에서 4.10:1 로 미달) */
+  color: var(--ink-650);
+  padding: 24px max(16px, calc((100vw - var(--content-max)) / 2));
+  font-size: calc(13px * var(--font-scale));
+  text-align: center;
+}
+.footer-disclaimer { max-width: 72ch; color: var(--ink-650); }
+.footer-meta { color: var(--ink-650); }
+.app-footer .operator-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--ink-650);
+  font-size: calc(13px * var(--font-scale));
+  cursor: pointer;
+}
+
+/* 헤더 정렬 — 로고 락업 + 우측 컨트롤 */
+.brand-button {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.header-actions { display: flex; align-items: center; gap: 12px; }
+
+@media (max-width: 767px) {
+  .brand-word small { display: none; }
+  .header-actions { gap: 8px; }
+}
+
+/* ── 앱 화면 배경 위계 (2026-08-04) ─────────────────────────────────────────
+   랜딩과 같은 규칙: 흰 면 = 지금 볼 것, surface-soft = 이미 끝났거나 참고할 것.
+   패널을 전부 흰색으로 두면 페이지 안에서 시선의 출발점이 사라진다. */
+.family-profile,
+.recent-panel {
+  background: var(--surface-soft);
+}
+/* 접힌 프로필 안에서 편집 폼을 펼치면 입력은 다시 흰 면이어야 읽힌다.
+   🔴 shorthand(`background`)를 쓰면 background-image 까지 리셋되어 셀렉트의
+   커스텀 chevron 이 지워진다 — 색만 바꿔야 한다. */
+.family-profile input,
+.family-profile select {
+  background-color: var(--surface);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   랜딩 v2 (2026-08-04) — 히어로 슬라이더 · 기능(실화면) · FAQ
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ① 히어로 슬라이더 ──────────────────────────────────────────────────────
+   자동재생 없음 (§6 모션 제한 + 읽는 중 화면을 빼앗지 않는다). 이동은 화살표·점. */
+.landing-hero-slider {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+  margin-top: 24px;
+}
+.hero-slide {
+  /* min-height 가 아니라 고정 height — 슬라이드마다 내용량이 달라도 배너 크기가
+     출렁이면 안 된다. 슬라이드를 넘길 때 아래 콘텐츠가 밀렸다 당겨지는 것이
+     "이미지가 다르게 보인다"의 실체였다. */
+  height: 460px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  padding: 40px;
+  overflow: hidden;
+}
+/* 사진 위 텍스트는 반투명이 아니라 단색 패널 — §Source Assets "solid readability overlay" */
+.hero-slide-panel {
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+.hero-kicker {
+  color: var(--primary-60);
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 700;
+}
+.hero-slide-panel .display {
+  margin-top: 8px;
+  font-size: calc(32px * var(--font-scale));
+  line-height: 1.35;
+}
+.hero-body {
+  margin: 12px 0 24px;
+  color: var(--ink-650);
+  font-size: calc(19px * var(--font-scale));
+}
+
+/* 제품 슬라이드 — 사진 대신 실제 화면. 배경은 캔버스, 패널+화면 나란히 */
+.hero-slide-product {
+  background: var(--canvas);
+  gap: 32px;
+}
+.hero-slide-product .hero-slide-panel { border: none; background: transparent; padding: 8px; flex: 1 1 0; }
+.hero-product-shot {
+  margin: 0;
+  flex: 1.1 1 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 8px;
+  align-self: center;
+}
+.hero-product-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 원본이 어떤 크기여도 16:10 으로 고정 — 위쪽부터 보여주고 아래를 자른다 */
+  aspect-ratio: 16 / 10;
+  max-height: 360px;
+  object-fit: cover;
+  object-position: top;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+@media (max-width: 860px) {
+  .hero-product-shot { display: none; } /* 좁은 화면에선 텍스트가 우선 */
+}
+
+.hero-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+  background: var(--surface);
+}
+.hero-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-800);
+  cursor: pointer;
+}
+.hero-arrow:hover { background: var(--surface-soft); }
+.hero-dots { display: flex; gap: 8px; }
+.hero-dots button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  cursor: pointer;
+}
+.hero-dots button.is-active {
+  background: var(--primary-50);
+  border-color: var(--primary-50);
+}
+
+/* ── ③ 설명 ────────────────────────────────────────────────────────────────*/
+.landing-about { text-align: center; }
+.about-lead {
+  margin: 16px auto 0;
+  max-width: 62ch;
+  font-size: calc(19px * var(--font-scale));
+  line-height: 1.6;
+  text-align: left;
+}
+.about-meta {
+  margin-top: 16px;
+  color: var(--ink-650);
+  font-size: calc(15px * var(--font-scale));
+}
+
+/* ── ④ 기능 — 실제 화면 캡처, 좌우 교차 배치 ────────────────────────────────*/
+.feature-row {
+  display: grid;
+  /* 두 칸을 동일 폭으로 — 5fr/7fr 비대칭이면 좌우 교차 시 이미지가 좁은 칸에
+     떨어져 행마다 목업 크기가 달라진다 (실측 615px vs 433px). */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  align-items: center;
+  margin-top: 40px;
+}
+.feature-row.is-flipped .feature-copy { order: 2; }
+.feature-row.is-flipped .feature-shot { order: 1; }
+.feature-copy h3 {
+  margin-top: 12px;
+  font-size: calc(24px * var(--font-scale));
+}
+.feature-copy p {
+  margin-top: 12px;
+  color: var(--ink-650);
+  font-size: calc(17px * var(--font-scale));
+}
+.feature-shot {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 8px;
+}
+.feature-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 목업 4장 통일 규격 (원본 2400x1500). aspect-ratio 는 원본이 규격을 벗어나도
+     레이아웃을 지키는 가드다 — 어긋난 이미지는 위부터 보여주고 아래를 자른다. */
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+
+/* ── ⑤ FAQ — details/summary 아코디언 (모션 허용 대상) ─────────────────────*/
+.faq-list {
+  max-width: var(--reading-max);
+  margin: 32px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 20px 24px;
+  font-size: calc(17px * var(--font-scale));
+  font-weight: 700;
+  position: relative;
+  padding-right: 48px;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--ink-650);
+  border-bottom: 2px solid var(--ink-650);
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 200ms ease-in-out;
+}
+.faq-item[open] summary::after { transform: translateY(-30%) rotate(225deg); }
+.faq-item summary:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-lg); }
+.faq-item p {
+  padding: 0 24px 20px;
+  color: var(--ink-800);
+  font-size: calc(17px * var(--font-scale));
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .hero-slide { padding: 16px; height: 400px; }
+  .hero-slide-panel { padding: 20px; }
+  .hero-slide-panel .display { font-size: calc(24px * var(--font-scale)); }
+  .feature-row,
+  .feature-row.is-flipped { grid-template-columns: 1fr; gap: 16px; }
+  .feature-row.is-flipped .feature-copy { order: 1; }
+  .feature-row.is-flipped .feature-shot { order: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-item summary::after { transition: none; }
+}

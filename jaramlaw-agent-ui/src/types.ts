@@ -210,6 +210,8 @@ export interface HealthStatus {
     laws: number;
     supports: number;
     scenarios: number;
+    /** 수록 법령 중 가장 최근 시행일 (YYYY-MM-DD). "데이터 갱신일"이 아니다. */
+    latest_effective_date?: string | null;
   };
   operations?: {
     team_topology_present: boolean;
