@@ -86,6 +86,16 @@ class LegalBasis:
         return bool(self.law and self.article and self.effective_date)
 
 
+# 근거 본문 길이 상한. 답변자·비평가가 공유한다 (LawArticle.evidence_body).
+#
+# 조문 원문이 900자였을 때 근로기준법 제74조가 제1·2항에서 잘렸고, 비평가는 그 잘린
+# 발췌를 근거로 "제4·5·7항 원문이 없다"며 답변을 차단했다 (2026-08-06 실측).
+# 한 조문이 통째로 들어갈 만큼 올린다 — 출력이 아닌 입력 토큰이라 캐시가 흡수한다.
+OFFICIAL_TEXT_LIMIT = 2500
+BYEOLPYO_LIMIT = 1400
+SUMMARY_LIMIT = 300
+
+
 @dataclass
 class LawArticle:
     law_id: str
@@ -137,6 +147,38 @@ class LawArticle:
         if parsed is None:
             return True
         return parsed <= ref_date
+
+    def evidence_body(self) -> list[str]:
+        """답변 모델과 비평 모델이 **똑같이** 보는 근거 본문.
+
+        두 곳이 각자 잘라 쓰면 비평가가 답변자보다 좁은 시야로 판정하고, 정상 답변까지
+        "네 인용은 제공 목록에 없다"며 차단한다. 2026-08-06 라이브 실측: 상담 3/3이
+        BLOCK이었고 비평 사유가 전부 "제공 목록에 별표4/제N항 원문이 없다"였다 —
+        비평가는 400자만 보고 별표 전사본은 아예 못 받는 반면 답변자는 900자 + 별표를
+        받고 있었다. 근거 직렬화는 이 메서드 한 곳뿐이어야 한다.
+
+        잘린 경우 말줄임을 남긴다. 두 모델 모두 "여기서 끊겼다"를 알아야, 답변자는
+        범위 밖 항을 지어내지 않고 비평가는 잘림을 환각으로 오판하지 않는다.
+        """
+        def cut(text: str, limit: int) -> str:
+            return text if len(text) <= limit else f"{text[:limit]} …(이하 생략 — 원문 링크 참조)"
+
+        lines: list[str] = []
+        official = (self.official_text or "").strip()
+        summary = self.text_summary.strip()
+        if official:
+            lines.append(f"- 조문 원문: {cut(official, OFFICIAL_TEXT_LIMIT)}")
+        if "별표" in self.article and summary:
+            # 별표(계산표 등)는 법제처 Open API가 텍스트로 제공하지 않는다(HWP/PDF/이미지·JS 렌더).
+            # 따라서 시드에 전사한 별표 표가 사실상의 원문이며, 답변자와 비평가 **양쪽**에게
+            # 권위 있는 근거로 준다. 한쪽만 주면 계산 근거가 환각으로 판정된다.
+            lines.append(
+                "- 별표 표 원문(법제처 API 미제공 → 전사본, 계산 시 이 표를 근거로 사용): "
+                f"{cut(summary, BYEOLPYO_LIMIT)}"
+            )
+        elif not official and summary:
+            lines.append(f"- 요약(원문 아님): {cut(summary, SUMMARY_LIMIT)}")
+        return lines
 
 
 @dataclass

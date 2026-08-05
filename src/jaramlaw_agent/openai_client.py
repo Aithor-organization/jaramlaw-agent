@@ -197,17 +197,9 @@ class OpenAiClient:
             lines.append(f"- 시행일자: {law.effective_date}")
             lines.append(f"- 출처: {law.source_url}")
             lines.append(f"- 근거 등급: {self._SOURCE_LABELS.get(law.source_mode, law.source_mode)}")
-            official = (law.official_text or "").strip()
-            is_byeolpyo = "별표" in law.article
-            if official:
-                lines.append(f"- 조문 원문: {official[:900]}")
-            if is_byeolpyo and law.text_summary.strip():
-                # 별표(계산표 등)는 법제처 Open API가 텍스트로 제공하지 않아(HWP/PDF/이미지·JS 렌더)
-                # 조문 원문 API 응답에 포함되지 않는다. 따라서 시드에 전사된 별표 표가 사실상의 원문이며,
-                # LLM이 '컨텍스트에 없다'고 회피하지 않도록 권위 있는 근거로 제시한다 (출처 재확인 권장).
-                lines.append(f"- 별표 표 원문(법제처 API 미제공 → 전사본, 계산 시 이 표를 근거로 사용): {law.text_summary.strip()[:1400]}")
-            elif not official:
-                lines.append(f"- 요약(원문 아님): {law.text_summary.strip()[:300]}")
+            # 근거 본문 직렬화는 LawArticle.evidence_body 한 곳에만 있다 —
+            # 비평가(adversarial_critic)가 같은 메서드를 쓰므로 양쪽 시야가 항상 일치한다.
+            lines.extend(law.evidence_body())
             if law.violation_penalty:
                 lines.append(f"- 위반 시: {law.violation_penalty.get('penalty', '')} / 신고처: {law.violation_penalty.get('report_channel', '')}")
             lines.append("")
@@ -216,6 +208,9 @@ class OpenAiClient:
             "- '조문 원문'이 제공된 항목은 그 원문을 그대로 근거로 삼아 답하라.\n"
             "- '요약(원문 아님)'만 있는 항목도 근거로 쓸 수 있다. 다만 단정하지 말고 "
             "'요약 기반이므로 조문 원문 확인이 필요하다'고 밝혀라.\n"
+            "- 위에 실린 원문 범위 안에서만 인용하라. '…(이하 생략)'으로 끊긴 뒤의 항·호나, "
+            "실리지 않은 항의 내용을 기억에 의존해 인용·단정하지 마라. 필요하면 "
+            "'해당 항은 원문 링크에서 확인이 필요하다'고 밝혀라.\n"
             "- 위 목록에 법령이 하나라도 있으면 '관련 법령이 없다'고 말하지 마라. "
             "있는 조문을 근거 등급과 함께 제시하라."
         )

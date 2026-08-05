@@ -102,10 +102,16 @@ class CriticVerdict:
         }
 
 
-def _law_context(laws: list[LawArticle], limit: int = 6) -> str:
+def _law_context(laws: list[LawArticle], limit: int = 8) -> str:
+    """비평가가 볼 근거 목록. 답변자와 **같은 메서드**로 직렬화한다.
+
+    비평가의 판정 규칙이 "이 목록에 없으면 환각"이므로, 목록이 답변자가 본 것보다
+    좁으면 정상 답변까지 환각으로 판정된다. limit도 답변자와 같은 8로 맞춘다
+    (6이면 7~8번째 법령을 인용한 답변이 근거 없이 차단된다).
+    """
     lines = []
     for i, law in enumerate(laws[:limit], 1):
-        body = (law.official_text or law.text_summary or "").strip()[:400]
+        body = "\n   ".join(law.evidence_body()) or "(본문 없음)"
         lines.append(
             f"{i}. {law.law_name} {law.article} (시행 {law.effective_date}, 근거등급 {law.source_mode})\n"
             f"   {body}"
