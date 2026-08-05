@@ -1553,20 +1553,51 @@ function renderWorkflowReply(report: JsonRecord, laws: LawItem[], language: UiLa
   // 생성형 AI가 쓴 안내문이 있으면 그것이 부모가 읽을 본문이다.
   //
   // 주의: verifierRatio는 결정론 파이프라인이 만든 claim(법령·지원·권리카드·문서초안)의 검증 비율이며,
-  // 아래 AI 본문 자체는 검증 대상이 아니다. 두 수치를 나란히 놓으면 AI 답변이 검증된 것처럼 읽히므로,
-  // AI 본문 아래에는 "AI 답변은 검증되지 않았다"는 사실을 명시하고 검증률은 붙이지 않는다.
+  // AI 본문에는 적용되지 않는다. 두 수치를 나란히 놓으면 AI 답변이 검증된 것처럼 읽히므로 섞지 않는다.
+  //
+  // AI 본문을 보는 것은 별개의 게이트 — 독립 적대적 비평가(다른 회사 모델)다. 비평가가 BLOCK을
+  // 내면 이 분기까지 오지 않고 답변이 보류된다. 따라서 여기 도달한 답변은 비평가가 통과시켰거나
+  // (PASS/WARN), 비평가가 죽어서 아무도 안 본(UNAVAILABLE) 둘 중 하나이며 **그 차이를 밝힌다.**
+  // 전건 "검증되지 않았습니다"로 적으면 실제로 검토받은 답변까지 미검증으로 오표기된다.
   if (asString(ai.mode) === "llm" && aiText) {
     const withheld = Number(ai.withheld_laws ?? 0);
     const pending = Number(ai.not_yet_effective_laws ?? 0);
+    const citable = Number(ai.citable_laws ?? 0);
+    const critic = asRecord(report.adversarial_critic);
+    const criticVerdict = asString(critic.verdict);
+    const criticFindings = asArray(critic.findings);
+    const criticNote = asString(critic.summary).trim()
+      || asString(asRecord(criticFindings[0]).reason).trim();
+    const scope = language === "en"
+      ? `Written from ${citable} in-force, fully-cited article(s)${withheld ? `; ${withheld} withheld for incomplete citation` : ""}${pending ? `; ${pending} excluded as not yet in force` : ""}.`
+      : `시행 중이고 인용 4요소를 갖춘 조문 ${citable}건을 근거로 작성되었습니다${withheld ? ` · 인용 불완전 ${withheld}건 보류` : ""}${pending ? ` · 시행 전 ${pending}건 제외` : ""}.`;
+    const check = language === "en"
+      ? "Check every cited article against the linked source before acting."
+      : "인용된 조문은 반드시 출처 링크로 직접 확인하세요.";
+
+    let verdictLine: string;
+    if (criticVerdict === "PASS") {
+      verdictLine = language === "en"
+        ? `✅ An **independent reviewer model** (a different vendor's AI) checked this answer against the cited articles and found no defect. ${scope} ${check}`
+        : `✅ **독립 검증 모델**(다른 회사 AI)이 이 답변을 근거 조문과 대조해 검토했고, 결함을 찾지 못했습니다. ${scope} ${check}`;
+    } else if (criticVerdict === "WARN") {
+      verdictLine = language === "en"
+        ? `⚠️ An **independent reviewer model** checked this answer and left ${criticFindings.length} caution(s)${criticNote ? `: ${criticNote}` : ""} ${scope} ${check}`
+        : `⚠️ **독립 검증 모델**(다른 회사 AI)이 이 답변을 검토해 주의 ${criticFindings.length}건을 남겼습니다${criticNote ? ` — ${criticNote}` : ""} ${scope} ${check}`;
+    } else {
+      // UNAVAILABLE(키 없음·모델 장애·파싱 실패) — 아무도 이 문장을 안 봤다는 사실을 숨기지 않는다.
+      verdictLine = language === "en"
+        ? `⚠️ This AI answer is **not machine-verified** — the independent reviewer was unavailable. ${scope} ${check}`
+        : `⚠️ 위 AI 답변은 **자동 검증되지 않았습니다** — 독립 검증 모델을 쓸 수 없었습니다. ${scope} ${check}`;
+    }
+
     return [
       sourceBadge,
       "",
       aiText,
       "",
       "---",
-      language === "en"
-        ? `⚠️ This AI answer is **not machine-verified**. It was written from ${Number(ai.citable_laws ?? 0)} in-force, fully-cited article(s)${withheld ? `; ${withheld} withheld for incomplete citation` : ""}${pending ? `; ${pending} excluded as not yet in force` : ""}. Check every cited article against the linked source before acting.`
-        : `⚠️ 위 AI 답변은 **자동 검증되지 않았습니다**. 시행 중이고 인용 4요소를 갖춘 조문 ${Number(ai.citable_laws ?? 0)}건만 근거로 제공했을 뿐, 답변 문장 자체는 검증 대상이 아닙니다${withheld ? ` · 인용 불완전 ${withheld}건 보류` : ""}${pending ? ` · 시행 전 ${pending}건 제외` : ""}. 인용된 조문은 반드시 출처 링크로 직접 확인하세요.`,
+      verdictLine,
       language === "en"
         ? `Deterministic outputs (separately verified ${Math.round(verifierRatio * 100)}%): supports ${supports.length} · rights cards ${rights.length} · drafts ${docs.length}`
         : `아래 결정론 산출물은 별도 검증됨(${Math.round(verifierRatio * 100)}%): 지원 ${supports.length}건 · 권리카드 ${rights.length}장 · 문서초안 ${docs.length}건`,
