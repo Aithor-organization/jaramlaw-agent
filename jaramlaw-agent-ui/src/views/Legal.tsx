@@ -14,8 +14,9 @@
 export const CONSENT_VERSION = "2026-08-12";
 
 /** 🔴 실제로 수신되는 주소여야 한다. 개인정보 열람·삭제 요청이 오는 창구다.
- *  업무용 주소가 따로 있으면 바꿀 것 — 여기 적힌 주소로 연락이 안 가면 방침이 거짓이 된다. */
-export const CONTACT_EMAIL = "rkswkdrpwkd01@gmail.com";
+ *  여기 적힌 주소로 연락이 안 가면 처리방침이 거짓이 된다 — 주소를 바꿀 때는
+ *  수신이 되는지 먼저 확인하고 바꿀 것. (2026-08-12 업무용 주소로 지정) */
+export const CONTACT_EMAIL = "aithor@aithor.biz";
 
 export function PrivacyView({ onExit }: { onExit: () => void }) {
   return (
