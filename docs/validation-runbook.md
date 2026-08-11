@@ -10,20 +10,42 @@ export JL_TOKEN="<Railway 환경변수 JARAMLAW_API_TOKEN 값>"
 
 ---
 
-## 🔴 시작 전 딱 한 번 — 볼륨 확인
+## 🔴 시작 전 딱 한 번 — 볼륨 붙이기
 
-**이걸 안 하면 나머지가 다 무의미하다.** Dockerfile은 `/app/data`에 쓰는데, Railway에 볼륨이
-안 붙어 있으면 재배포마다 계정·상담·퍼널이 **전부 초기화**된다.
+> **2026-08-12 실측: 볼륨이 없다.** 재배포 전 상담 1건을 남겨 audit 기록을 3→4로 올린 뒤
+> 배포했더니 다시 3이 됐다. 지금 상태로 부모를 받으면 배포 한 번에 계정이 전부 사라진다.
 
-1. Railway 대시보드 → 서비스 → **Volumes**
-2. `/app/data` 마운트가 있는지 확인
-3. 없으면 → Volume 추가, Mount path `/app/data`, 재배포
+Railway는 배포할 때마다 컨테이너를 새로 만들고 옛것을 버린다. 그 안에 쓴 파일도 같이 사라진다.
+볼륨은 컨테이너 **바깥**의 디스크라, 새 컨테이너에 다시 연결되어 내용이 남는다.
 
-확인 방법 (가입자가 생긴 뒤):
+1. Railway 대시보드 → 프로젝트 → **jaramlaw-agent 서비스** → **Volumes** 탭
+2. `+ New Volume` → **Mount path: `/app/data`** (경로가 정확해야 한다 — Dockerfile의
+   `JARAMLAW_DATA_DIR`이 이 경로다. 다른 곳에 붙이면 서비스는 여전히 컨테이너 안에 쓴다)
+3. 재배포
+
+### 붙였는지 확인 — 표시등이 있다
+
 ```bash
-curl -s $JL/api/health | grep -o '"history_count":[0-9]*'
-# 재배포 후 이 숫자가 0으로 떨어지면 볼륨이 없는 것이다
+curl -s $JL/api/health | python3 -m json.tool | grep -A 4 data_dir
 ```
+
+```json
+"data_dir": {
+    "path": "/app/data",
+    "first_seen": "2026-08-12T...",       // 데이터가 처음 만들어진 시각
+    "process_started": "2026-08-13T...",  // 지금 도는 프로세스가 켜진 시각
+    "persisted": true
+}
+```
+
+| `persisted` | 뜻 | 할 일 |
+|---|---|---|
+| `true` | 이전 배포의 데이터를 그대로 물려받았다 | ✅ 없음 |
+| `"unknown — 재배포를 한 번 더 하면 판정된다"` | 아직 비교할 이전 부팅이 없다 | 배포를 한 번 더 하고 다시 확인 |
+| 계속 `unknown` | **매 배포마다 초기화되고 있다** | 🔴 볼륨 미설정 — 위 절차로 |
+
+> `unknown`이 두 번 연속 나오면 그게 곧 "볼륨 없음"이다. `first_seen`과 `process_started`가
+> 매번 같은 값으로 갱신되고 있다는 뜻이기 때문이다.
 
 ---
 

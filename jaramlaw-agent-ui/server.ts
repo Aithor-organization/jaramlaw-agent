@@ -87,6 +87,31 @@ initAccountStore(DATA_ROOT);
 // 퍼널 이벤트·부모 피드백도 같은 뿌리에 — 볼륨 하나로 전부 살아남아야 한다.
 initTelemetry(DATA_ROOT);
 
+/* 데이터 디렉터리가 재배포를 견디는가 — 배포마다 켜지는 표시등.
+ *
+ * Railway는 배포할 때마다 컨테이너를 새로 만들고 옛 컨테이너를 버린다. 볼륨을 붙이지
+ * 않으면 그 안에 쓴 계정·상담·퍼널이 전부 함께 사라진다. 2026-08-12 실측으로 실제
+ * 그랬다: 상담 1건을 남겨 audit 3→4로 올린 뒤 재배포하니 다시 3이 됐다.
+ *
+ * 문제는 이게 **조용히** 일어난다는 것이다. 화면은 멀쩡하고, 부모가 "로그인이 안 된다"고
+ * 말해줘야 안다. 그래서 첫 부팅 시각을 파일로 남기고, 그 파일이 이번 프로세스보다
+ * 오래됐는지를 /api/health 가 보고하게 한다. 살아남았다면 볼륨이 붙어 있는 것이다.
+ */
+const BOOT_MARKER = path.join(DATA_ROOT, ".first-boot");
+const PROCESS_STARTED_AT = new Date().toISOString();
+let dataFirstSeenAt = PROCESS_STARTED_AT;
+try {
+  if (fs.existsSync(BOOT_MARKER)) {
+    dataFirstSeenAt = fs.readFileSync(BOOT_MARKER, "utf8").trim() || PROCESS_STARTED_AT;
+  } else {
+    fs.writeFileSync(BOOT_MARKER, PROCESS_STARTED_AT, "utf8");
+  }
+} catch {
+  // 마커를 못 읽고 못 쓰면 판정을 포기한다. 서비스는 그대로 돈다.
+}
+/** 이전 배포가 남긴 마커를 이번 프로세스가 읽었다 = 디렉터리가 재배포를 견뎠다. */
+const DATA_SURVIVED_REDEPLOY = dataFirstSeenAt !== PROCESS_STARTED_AT;
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const PYTHON_BIN = process.env.PYTHON_BIN || "python";
@@ -705,6 +730,15 @@ app.get("/api/health", (_req, res) => {
     audit: {
       present: fs.existsSync(AUDIT_LOG_DIR),
       recent_count: readRecentAuditRecords(20).length,
+    },
+    /* 볼륨 표시등. `persisted: false`면 다음 배포에 계정·상담·퍼널이 전부 사라진다.
+       첫 배포 직후에는 판정 자체가 불가능하므로(비교할 이전 부팅이 없다) unknown이다 —
+       "아직 모른다"와 "없다"를 구분하지 않으면, 방금 볼륨을 붙인 사람이 실패로 오해한다. */
+    data_dir: {
+      path: DATA_ROOT,
+      first_seen: dataFirstSeenAt,
+      process_started: PROCESS_STARTED_AT,
+      persisted: DATA_SURVIVED_REDEPLOY ? true : "unknown — 재배포를 한 번 더 하면 판정된다",
     },
     seed_data: {
       laws: countFiles(path.join(PARENT_ROOT, "data", "seed", "laws"), ".yaml"),
