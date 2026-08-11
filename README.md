@@ -333,13 +333,19 @@ PYTHONPATH=src python3 -m jaramlaw_agent demo --scenario C
 
 ```bash
 PYTHONPATH=src python3 -m pytest tests/ -q
-# 157 tests
+# 278 passed / 4 skipped (2026-08-12 실측)
 
 cd jaramlaw-agent-ui
-npm run lint
-npm run build
-npm run test:e2e
+npm run check      # 고치는 중에는 이것만 — tsc(3초) + chromium 1개, 첫 실패에서 중단
+npm run test:e2e   # 마지막에 한 번 — chromium + mobile 전체 (약 50초)
 ```
+
+> 🔴 **편집 → `npm run lint` → 그다음 테스트.** 순서를 지킬 것.
+> 타입/구문 오류를 5분짜리 e2e로 발견하면 그 5분이 통째로 낭비다 (2026-08-12에 실제로 그랬다).
+>
+> e2e는 `tests/global-setup.ts`가 실행 전에 ① `.playwright-data` 초기화 ② 소스가 새로우면
+> dist 재빌드를 끝내 둔다. 이 둘이 없던 동안 **낡은 번들을 검사하거나** 누적된 계정
+> 460KB를 매 가입마다 다시 쓰느라 실행마다 다른 테스트가 무작위로 실패했다.
 
 주요 회귀 차단:
 - `test_constitution.py` — 5원칙 회귀 차단
