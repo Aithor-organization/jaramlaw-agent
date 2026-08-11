@@ -12,6 +12,9 @@ export async function enterApp(page: Page, baseUrl = ""): Promise<void> {
   await page.goto(`${baseUrl}/#signup`, { waitUntil: "load" });
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill("jaramlaw-e2e-pass");
+  // 개인정보 수집·이용 동의는 필수다 (2026-08-12). 체크하지 않으면 버튼이 잠기고,
+  // 우회해서 API를 직접 불러도 서버가 거절한다 — 테스트도 부모와 같은 문을 지난다.
+  await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "가입하기" }).click();
   await expect(page.getByRole("tab", { name: "홈" })).toBeVisible({ timeout: 20_000 });
 }

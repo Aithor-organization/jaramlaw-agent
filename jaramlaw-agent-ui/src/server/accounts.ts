@@ -34,7 +34,15 @@ interface StoredUser {
   passwordHash: string;
   createdAt: string;
   profile: StoredProfile | null;
+  /** 개인정보 수집·이용 동의 시각. 동의 없이 만들어진 계정은 존재할 수 없다.
+   *  버전을 함께 남기는 이유: 약관이 바뀌면 "무엇에 동의했는지"가 달라지므로,
+   *  시각만으로는 나중에 소명이 안 된다. */
+  consentedAt?: string;
+  consentVersion?: string;
 }
+
+/** 약관·처리방침 개정 시 올린다. 클라이언트(src/legal.ts)와 값이 같아야 한다. */
+export const CONSENT_VERSION = "2026-08-12";
 
 interface StoredSession {
   token: string;
@@ -133,6 +141,7 @@ export function createUser(
   password: string,
   nickname: string,
   profile: StoredProfile | null,
+  consented: boolean = false,
 ): SignupResult {
   const normalized = normalizeEmail(email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
@@ -140,6 +149,11 @@ export function createUser(
   }
   if (typeof password !== "string" || password.length < 8) {
     return { kind: "error", message: "비밀번호는 8자 이상으로 정해 주세요." };
+  }
+  // 동의는 서버에서 막는다. 화면의 체크박스만으로는 API 직접 호출을 거를 수 없고,
+  // 동의 기록이 없는 계정이 하나라도 생기면 그 계정의 데이터는 근거 없이 보관된 것이 된다.
+  if (!consented) {
+    return { kind: "error", message: "개인정보 수집·이용에 동의해 주세요." };
   }
   const store = read();
   if (store.users.some((user) => user.email === normalized)) {
@@ -154,6 +168,8 @@ export function createUser(
     passwordHash: hashPassword(password, salt),
     createdAt: new Date().toISOString(),
     profile,
+    consentedAt: new Date().toISOString(),
+    consentVersion: CONSENT_VERSION,
   };
   const token = randomBytes(32).toString("hex");
   write({
@@ -202,6 +218,26 @@ export function logout(token: string): void {
   if (!token) return;
   const store = read();
   write({ ...store, sessions: store.sessions.filter((item) => item.token !== token) });
+}
+
+/** 운영자 전용 — 주간 알림 대상을 뽑을 때 쓴다.
+ *
+ * 알림 발송을 자동화하기 전에, 사람이 직접 보내며 "알림이 행동을 만드나"를 먼저 확인한다.
+ * 30~50명 규모에서는 그게 더 빠르고, 반응이 없으면 발송 인프라를 아예 안 만들어도 된다. */
+export function listUsersForOps(): Array<{
+  id: string;
+  email: string;
+  nickname: string;
+  createdAt: string;
+  profile: StoredProfile | null;
+}> {
+  return read().users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    nickname: user.nickname,
+    createdAt: user.createdAt,
+    profile: user.profile,
+  }));
 }
 
 export function saveProfile(userId: string, profile: StoredProfile): PublicUser | null {

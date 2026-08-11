@@ -51,8 +51,11 @@ export function signup(
   password: string,
   nickname: string,
   profile: FamilyProfile | null,
+  consented: boolean,
 ): Promise<AccountUser> {
-  return post("/api/auth/signup", { email, password, nickname, profile });
+  // 동의 여부는 서버가 다시 검사한다 (accounts.createUser) — 화면 체크박스만으로는
+  // API 직접 호출을 거를 수 없기 때문이다. 여기서는 사용자의 선택을 그대로 전달만 한다.
+  return post("/api/auth/signup", { email, password, nickname, profile, consented });
 }
 
 export function login(email: string, password: string): Promise<AccountUser> {

@@ -56,6 +56,9 @@ import { THIS_YEAR, YearMonthPicker } from "./components/YearMonthPicker";
 import { CheckWizard } from "./views/Check";
 import { CheckResult } from "./views/CheckResult";
 import { AuthView } from "./views/Auth";
+import { PrivacyView, TermsView } from "./views/Legal";
+import { FeedbackButton } from "./components/FeedbackButton";
+import { track, trackReturnVisitIfNewDay } from "./telemetry";
 import type {
   CalculationBreakdown,
   CaseData,
@@ -203,7 +206,7 @@ function inferScenario(text: string): "academy_refund" | "general" {
 
 /* 화면 층위가 하나 늘었다: 예전에는 해시가 곧 탭이었지만, 이제 로그인 전 화면
  * (랜딩·진단·결과·가입)과 로그인 후 앱이 갈린다. 해시 없는 "/" 는 랜딩이다. */
-type ViewKind = "landing" | "check" | "result" | "signup" | "login" | "app" | "admin";
+type ViewKind = "landing" | "check" | "result" | "signup" | "login" | "privacy" | "terms" | "app" | "admin";
 interface Route { view: ViewKind; parent: ParentTab; admin: AdminTab | null }
 
 const PUBLIC_VIEWS: Record<string, ViewKind> = {
@@ -211,6 +214,8 @@ const PUBLIC_VIEWS: Record<string, ViewKind> = {
   result: "result",
   signup: "signup",
   login: "login",
+  privacy: "privacy",
+  terms: "terms",
 };
 
 function parseRoute(): Route {
@@ -240,6 +245,8 @@ const VIEW_TITLES: Partial<Record<ViewKind, string>> = {
   result: "진단 결과 | 자람법",
   signup: "가입 | 자람법",
   login: "로그인 | 자람법",
+  privacy: "개인정보 처리방침 | 자람법",
+  terms: "이용약관 | 자람법",
 };
 
 /** D-day 배지 문구·톤 (§4.4). 색만으로 상태를 구분하지 않으므로 라벨에 상태어를 넣는다. */
@@ -295,6 +302,15 @@ export default function App() {
     void fetch("/api/health").then((response) => response.json()).then(setHealth).catch(() => setHealth(null));
   }, []);
 
+  /* 퍼널 입구. 방문당 한 번만 센다 — 해시 이동으로 첫 화면에 되돌아올 때마다 세면
+     이탈률 분모가 부풀어 "입구는 멀쩡한데 진단에서 다 나간다"로 잘못 읽힌다. */
+  const landingCounted = useRef(false);
+  useEffect(() => {
+    if (route.view !== "landing" || landingCounted.current) return;
+    landingCounted.current = true;
+    track("landing_view");
+  }, [route.view]);
+
   // 로그인 상태를 먼저 확인한다. 확인 전에는 앱 화면을 그리지 않는다 — 새로고침할 때마다
   // 로그인 화면이 한 번 번쩍이고 앱으로 넘어가는 걸 막기 위해서다.
   useEffect(() => {
@@ -303,7 +319,12 @@ export default function App() {
       setUser(account);
       if (account?.profile) setProfile(account.profile);
       setAuthChecked(true);
-      if (account) void loadSessions();
+      if (account) {
+        // 리텐션은 가입자 기준으로만 센다. 익명 방문자는 방문 간 식별을 하지 않기 때문에
+        // 애초에 셀 수가 없고, 알고 싶은 것도 "가입한 부모가 다시 오나"이다.
+        trackReturnVisitIfNewDay();
+        void loadSessions();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -349,17 +370,22 @@ export default function App() {
   }, [profile.concern]);
 
   const startCheck = (preset: StagePreset) => {
+    track("check_start", { preset: preset || "none" });
     setStagePreset(preset);
     navigate("check");
   };
 
   const finishCheck = (next: FamilyProfile) => {
+    // 진단을 끝까지 마친 사람 수. 여기와 check_start의 격차가 '입구 이탈'이다.
+    track("check_done", { region: next.region || "none", household: next.household });
     setProfile(next);
     storeProfile(next);
     navigate("result");
   };
 
   const handleAuthenticated = (account: AccountUser) => {
+    // 로그인도 이 경로를 지나므로, 방금 가입한 경우만 센다.
+    if (route.view === "signup") track("signup_done");
     setUser(account);
     if (account.profile) setProfile(coerceProfile(account.profile));
     void loadSessions();
@@ -389,6 +415,9 @@ export default function App() {
   const sendConsultation = async (event: FormEvent) => {
     event.preventDefault();
     if (!query.trim() || sending) return;
+    // 가입만 하고 한 번도 안 물어본 사람이 몇 명인지가 '실사용 전환'이다.
+    // 질문 내용은 보내지 않는다 — 길이만으로도 이탈 분석엔 충분하다.
+    track("first_question", { length: query.trim().length });
     setSending(true);
     setNotice("입력 보호, 근거 확인, 답변 검증을 순서대로 진행하고 있습니다.");
     try {
@@ -500,6 +529,8 @@ export default function App() {
       </header>
       {children}
       <SiteFooter health={health} />
+      {/* 약관 화면에서는 띄우지 않는다 — 읽는 화면에 떠 있는 버튼은 방해만 된다. */}
+      {route.view !== "privacy" && route.view !== "terms" && <FeedbackButton route={route.view} />}
     </div>
   );
 
@@ -533,6 +564,12 @@ export default function App() {
         onExit={() => navigate("")}
       />,
     );
+  }
+  if (route.view === "privacy") {
+    return publicShell(<PrivacyView onExit={() => window.history.back()} />);
+  }
+  if (route.view === "terms") {
+    return publicShell(<TermsView onExit={() => window.history.back()} />);
   }
   if (route.view === "app" && !authChecked) {
     return publicShell(<LoadingPanel />);
@@ -638,6 +675,7 @@ export default function App() {
       )}
 
       <SiteFooter health={health} />
+      <FeedbackButton route={route.view === "admin" ? `admin/${route.admin}` : route.parent} />
     </div>
   );
 }
@@ -657,6 +695,10 @@ function SiteFooter({ health }: { health: HealthStatus | null }) {
         {typeof health?.seed_data.laws === "number" ? ` · 법령 ${health.seed_data.laws}건 · 지원 ${health.seed_data.supports}건` : ""}
         {health?.seed_data.latest_effective_date ? ` · 수록 법령 최신 시행일 ${health.seed_data.latest_effective_date}` : ""}
       </p>
+      <nav className="footer-links" aria-label="약관">
+        <button type="button" className="btn-text" onClick={() => navigate("privacy")}>개인정보 처리방침</button>
+        <button type="button" className="btn-text" onClick={() => navigate("terms")}>이용약관</button>
+      </nav>
       <button type="button" className="operator-link" onClick={() => navigate("admin/operations")}>
         <Lock aria-hidden="true" /> 운영자
       </button>

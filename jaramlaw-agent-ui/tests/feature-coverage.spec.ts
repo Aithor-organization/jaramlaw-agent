@@ -44,6 +44,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 let server: ChildProcess;
 
+
 test.beforeAll(async () => {
   test.setTimeout(120_000); // building the bundle can take a while on a cold cache
 
@@ -52,8 +53,11 @@ test.beforeAll(async () => {
   // proxy; that WS handshake fails and surfaces as a pageerror that makes the page look
   // "broken" to the browser even though React mounted fine. The prod build serves static
   // assets with no such client — and it is what actually ships.
+  /* 번들 최신화는 tests/global-setup.ts가 스위트 시작 전에 끝내 둔다 — 여기서 빌드하면
+     공용 dev 서버가 리로드되어 그 시점에 돌던 다른 테스트를 죽인다 (2026-08-12).
+     여기서는 결과물이 있는지만 확인하고, 없으면 설정이 잘못된 것이므로 즉시 멈춘다. */
   if (!existsSync(path.join(UI_ROOT, "dist", "server.cjs"))) {
-    execSync("npm run build", { cwd: UI_ROOT, stdio: "ignore" });
+    throw new Error("dist/server.cjs 없음 — playwright.config.ts의 globalSetup이 도는지 확인할 것");
   }
   server = spawn("node", ["dist/server.cjs"], {
     cwd: UI_ROOT,
@@ -67,8 +71,13 @@ test.beforeAll(async () => {
       JARAMLAW_DISABLE_PYTHON_BRIDGE: "0", // the whole point: bridge ON
       // 공용 서버와 같은 이유로 레이트리밋을 푼다 (playwright.config.ts 주석 참조).
       JARAMLAW_RATE_LIMIT_MAX: "500",
-      // 계정 저장소를 저장소 루트가 아닌 임시 경로로 뺀다 (accounts.json 오염 방지).
-      JARAMLAW_DATA_DIR: path.join(UI_ROOT, ".playwright-data"),
+      /* 🔴 공용 서버(4321)와 **다른** 디렉터리를 써야 한다.
+         같은 `.playwright-data`를 가리켰더니 두 프로세스가 각자 accounts.json 전체를
+         메모리에 캐시했다가 통째로 덮어썼고, 이쪽 서버가 쓰는 순간 저쪽에서 방금 만든
+         로그인 세션이 사라졌다. 증상은 "테스트 도중 갑자기 로그인 화면" — 실패가 매번
+         다른 테스트로 옮겨 다녀 오래 원인 불명이던 flake의 정체다 (2026-08-12).
+         `.playwright-data` 아래 하위 디렉터리로 두어 기존 .gitignore 규칙에 그대로 걸린다. */
+      JARAMLAW_DATA_DIR: path.join(UI_ROOT, ".playwright-data", "bridge"),
     },
     stdio: "ignore",
   });

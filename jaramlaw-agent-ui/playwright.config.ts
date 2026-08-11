@@ -2,6 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  /* 프로덕션 번들 최신화는 여기서 한 번만 — 테스트 도중에 빌드하면 vite 의존성 캐시가
+     다시 쓰이면서 공용 dev 서버가 페이지를 리로드하고, 그 순간 진행 중이던 테스트의
+     로그인 세션이 날아간다 (2026-08-12 실측: 실패가 프로젝트를 옮겨 다녔다). */
+  globalSetup: "./tests/global-setup.ts",
   fullyParallel: false,
   /* 워커를 1로 고정한다. fullyParallel:false 는 파일 안에서만 순차라 파일은 여전히
      여러 워커에 흩어지고, 그러면 chromium/mobile 프로젝트가 동시에

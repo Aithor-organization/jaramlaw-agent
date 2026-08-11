@@ -3326,3 +3326,107 @@ h3 { font-size: calc(19px * var(--font-scale)); line-height: 1.45; }
 @media (prefers-reduced-motion: reduce) {
   .faq-item summary::after { transition: none; }
 }
+
+/* ── 약관·개인정보 처리방침 ─────────────────────────────────────────────
+   읽는 문서라 본문 폭을 --reading-max 로 좁힌다. 페이지 컨테이너(--content-max)
+   그대로 두면 한 줄이 길어져 눈이 줄을 놓친다. */
+.legal-shell { width: min(var(--reading-max), 100%); margin: 0 auto; padding: 40px 16px 80px; }
+.legal-doc { padding: 32px 28px; }
+.legal-doc h1 { font-size: calc(28px * var(--font-scale)); line-height: 1.35; }
+.legal-doc h2 {
+  margin: 32px 0 10px;
+  font-size: calc(19px * var(--font-scale));
+  line-height: 1.4;
+}
+.legal-doc p, .legal-doc li { color: var(--ink-650); font-size: calc(16px * var(--font-scale)); line-height: 1.7; }
+.legal-doc ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.legal-meta { margin-top: 6px; font-size: calc(14px * var(--font-scale)); }
+.legal-lead {
+  margin: 20px 0 0;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--brand-soft);
+}
+/* 표는 좁은 화면에서 페이지를 밀어내지 않고 자기 안에서 가로 스크롤한다. */
+.legal-doc .legal-table { display: block; overflow-x: auto; width: 100%; margin-top: 12px; }
+.legal-table table, .legal-table { border-collapse: collapse; }
+.legal-table th, .legal-table td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  font-size: calc(15px * var(--font-scale));
+  white-space: nowrap;
+}
+.legal-table td { white-space: normal; min-width: 140px; }
+.legal-doc > .btn-text { margin-top: 32px; }
+
+/* 푸터 약관 링크 */
+.footer-links { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+
+/* ── 가입 동의 ──────────────────────────────────────────────────────── */
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 4px;
+  color: var(--ink-650);
+  font-size: calc(15px * var(--font-scale));
+  line-height: 1.6;
+}
+/* 체크박스는 시각적으로 숨기지 않는다 — 필수 동의는 눌렀다는 사실이 보여야 한다. */
+.consent-row input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; flex: 0 0 auto; }
+.consent-row a { color: var(--brand-strong); text-decoration: underline; }
+.consent-row small { display: block; margin-top: 4px; font-size: calc(13px * var(--font-scale)); }
+
+/* ── 피드백 ─────────────────────────────────────────────────────────── */
+.feedback-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-2, var(--shadow-1));
+  color: var(--ink-650);
+  font-size: calc(14px * var(--font-scale));
+  cursor: pointer;
+}
+.feedback-fab:hover { border-color: var(--brand); color: var(--brand-strong); }
+.feedback-fab svg { width: 16px; height: 16px; }
+/* 좁은 화면에서는 글자를 접고 아이콘만 — 본문 위에 떠 있는 요소라 자리를 적게 쓴다. */
+@media (max-width: 520px) {
+  .feedback-fab span { display: none; }
+  .feedback-fab { padding: 12px; }
+}
+.feedback-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 61;
+  width: min(340px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(16, 35, 29, 0.16);
+}
+.feedback-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.feedback-close { border: none; background: none; padding: 4px; cursor: pointer; color: var(--ink-650); }
+.feedback-close svg { width: 18px; height: 18px; }
+.feedback-panel form { display: flex; flex-direction: column; gap: 8px; }
+.feedback-panel textarea, .feedback-panel input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: calc(15px * var(--font-scale));
+  resize: vertical;
+}
+.feedback-done { margin: 0; color: var(--ink-650); font-size: calc(15px * var(--font-scale)); line-height: 1.6; }

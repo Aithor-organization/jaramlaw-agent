@@ -24,6 +24,7 @@ export function AuthView({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
+  const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,7 +38,7 @@ export function AuthView({
     setError("");
     try {
       const user = signingUp
-        ? await signupRequest(email, password, nickname, carriesProfile ? profile : null)
+        ? await signupRequest(email, password, nickname, carriesProfile ? profile : null, consented)
         : await loginRequest(email, password);
       onAuthenticated(user);
     } catch (caught) {
@@ -100,9 +101,36 @@ export function AuthView({
           </>
         )}
 
+        {/* 동의는 미리 체크해 두지 않는다. 기본 체크된 동의는 동의가 아니다.
+            서버(accounts.createUser)도 같은 검사를 하므로 화면을 우회해도 계정은 안 생긴다. */}
+        {signingUp && (
+          <div className="consent-row">
+            {/* 체크박스 이름은 짧게 고정한다. 설명 문단을 <label>로 감싸면 접근성 이름이
+                세 줄짜리 문장이 되고("…저장하는 것은 이메일, 사는 시·도…"), 스크린리더가
+                그걸 통째로 읽는다. 설명은 aria-describedby로 분리해 붙인다. */}
+            <input
+              id="auth-consent"
+              type="checkbox"
+              aria-label="개인정보 처리방침 및 이용약관 동의 (필수)"
+              aria-describedby="auth-consent-desc"
+              checked={consented}
+              onChange={(event) => setConsented(event.target.checked)}
+              required
+            />
+            <span id="auth-consent-desc">
+              {/* 새 탭으로 연다 — 작성 중인 가입 폼을 잃지 않게. */}
+              <a href="#/privacy" target="_blank" rel="noreferrer">개인정보 처리방침</a>
+              {" 및 "}
+              <a href="#/terms" target="_blank" rel="noreferrer">이용약관</a>
+              에 동의합니다. (필수)
+              <small>저장하는 것은 이메일, 사는 시·도, 아이 출생 연월입니다. 아이 이름과 정확한 주소는 받지 않습니다.</small>
+            </span>
+          </div>
+        )}
+
         {error && <p className="form-status is-error" role="alert">{error}</p>}
 
-        <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>
+        <button type="submit" className="btn btn-primary btn-lg" disabled={busy || (signingUp && !consented)}>
           {busy ? <><Loader2 className="spin" aria-hidden="true" /> 처리 중</> : <>{signingUp ? "가입하기" : "로그인"} <ArrowRight aria-hidden="true" /></>}
         </button>
 

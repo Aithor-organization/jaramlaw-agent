@@ -28,6 +28,7 @@ import {
   deleteConsultation,
   initAccountStore,
   listConsultations,
+  listUsersForOps,
   login as loginUser,
   logout as logoutUser,
   recordConsultation,
@@ -37,6 +38,14 @@ import {
   type PublicUser,
   type StoredProfile,
 } from "./src/server/accounts.js";
+import {
+  initTelemetry,
+  isFunnelStep,
+  readFeedback,
+  readFunnelEvents,
+  recordFeedback,
+  recordFunnelEvent,
+} from "./src/server/telemetry.js";
 
 type JsonRecord = Record<string, unknown>;
 type ClientType = ConsultationSession["clientType"];
@@ -75,6 +84,8 @@ for (const dir of [AUDIT_LOG_DIR, RUNS_DIR]) {
 // 부모 계정·프로필·상담 이력도 같은 볼륨에 둔다 (accounts.json). 감사 로그와 뿌리를
 // 공유해야 볼륨 하나로 셋 다 살아남는다.
 initAccountStore(DATA_ROOT);
+// 퍼널 이벤트·부모 피드백도 같은 뿌리에 — 볼륨 하나로 전부 살아남아야 한다.
+initTelemetry(DATA_ROOT);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -169,6 +180,7 @@ app.post("/api/auth/signup", rateLimit, (req, res) => {
     typeof body.password === "string" ? body.password : "",
     typeof body.nickname === "string" ? body.nickname : "",
     sanitizeProfile(body.profile),
+    body.consented === true,
   );
   if (result.kind === "error") return res.status(400).json({ status: "error", message: result.message });
   setSessionCookie(res, result.token);
@@ -565,6 +577,121 @@ function newestEffectiveDate(dirs: string[]): string | null {
   return newest || null;
 }
 
+/* 퍼널 기록. 실패해도 200을 준다 — 계측 오류가 부모 화면에 에러로 뜨면 안 된다.
+   레이트리밋은 걸지 않는다: 한 방문이 6개까지 정상적으로 찍고, 상담과 버킷을 공유하면
+   진단을 마친 부모가 정작 질문에서 429를 맞는다. 대신 본문 크기를 좁게 막는다. */
+app.post("/api/events", (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!isFunnelStep(body.step)) return res.json({ status: "success" });
+  const meta: Record<string, string | number | boolean> = {};
+  if (body.meta && typeof body.meta === "object") {
+    for (const [key, value] of Object.entries(body.meta as Record<string, unknown>).slice(0, 5)) {
+      if (typeof value === "string") meta[key.slice(0, 24)] = value.slice(0, 40);
+      else if (typeof value === "number" || typeof value === "boolean") meta[key.slice(0, 24)] = value;
+    }
+  }
+  recordFunnelEvent({
+    step: body.step,
+    vid: typeof body.vid === "string" ? body.vid.slice(0, 40) : "",
+    uid: currentUser(req)?.id,
+    // UA 원문은 남기지 않는다. 화면 폭만 알면 이탈 분석에 충분하다.
+    device: body.device === "mobile" ? "mobile" : "desktop",
+    ...(Object.keys(meta).length ? { meta } : {}),
+  });
+  return res.json({ status: "success" });
+});
+
+/** 부모가 직접 남기는 한 줄. 인터뷰보다 여기서 더 많이 건진다. */
+app.post("/api/feedback", rateLimit, (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return res.status(400).json({ status: "error", message: "내용을 적어 주세요." });
+  recordFeedback({
+    text: text.slice(0, 1000),
+    route: typeof body.route === "string" ? body.route.slice(0, 40) : "",
+    uid: currentUser(req)?.id,
+    contact: typeof body.contact === "string" ? body.contact.trim().slice(0, 120) : undefined,
+  });
+  return res.json({ status: "success" });
+});
+
+/* 운영자 백업. Railway CLI 없이도 한 줄로 통째로 내려받을 수 있어야 한다 —
+   볼륨이 안 붙어 있으면 재배포 한 번에 검증 표본이 사라지기 때문이다.
+   curl -H "x-jaramlaw-token: $TOKEN" <host>/api/ops/export > backup.json */
+app.get("/api/ops/export", requireOperatorAuth, (_req, res) => {
+  let accounts: unknown = null;
+  try {
+    accounts = JSON.parse(fs.readFileSync(path.join(DATA_ROOT, "accounts.json"), "utf8"));
+  } catch {
+    accounts = null;   // 아직 가입자가 없으면 파일 자체가 없다 — 오류가 아니다.
+  }
+  res.setHeader("Content-Disposition", `attachment; filename="jaramlaw-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+  return res.json({
+    status: "success",
+    exportedAt: new Date().toISOString(),
+    data: { accounts, funnel: readFunnelEvents(), feedback: readFeedback() },
+  });
+});
+
+/* 주간 컨시어지 알림 대상. 발송은 사람이 한다 (Phase 0-3).
+ *
+ * 자동 발송을 만들기 전에 "알림이 실제로 행동을 만드나"를 먼저 확인한다 — 반응이 없으면
+ * 발송 인프라를 아예 안 만들어도 되고, 있으면 그때는 만들 근거가 생긴 뒤다.
+ * ?within=14 → 앞으로 14일 안에 기한이 오는 지원이 있는 사용자만.
+ *
+ * 사용자 수만큼 파이썬을 순차로 띄운다. 30~50명·주 1회 수동 실행이라 감당되지만,
+ * 그 이상으로 늘면 병렬화가 아니라 자동 발송으로 넘어갈 때다. */
+app.get("/api/ops/reminders", requireOperatorAuth, async (req, res) => {
+  if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE === "1" || !fs.existsSync(PYTHON_SRC)) {
+    return res.status(503).json({ status: "error", message: "python_bridge_unavailable" });
+  }
+  const within = Math.min(Math.max(Number(req.query.within ?? 14) || 14, 1), 90);
+  const users = listUsersForOps().filter((user) => user.profile);
+  const targets: JsonRecord[] = [];
+  const failed: string[] = [];
+
+  for (const user of users) {
+    const profile = user.profile!;
+    const childMonths = (profile.children || [])
+      .map((child) => child.birthMonth)
+      .filter((month) => /^\d{4}-\d{2}$/.test(month || ""));
+    const expectedRaw = profile.expectedDate || "";
+    const expectedDate = /^\d{4}-\d{2}-\d{2}$/.test(expectedRaw)
+      ? expectedRaw
+      : /^\d{4}-\d{2}$/.test(expectedRaw) ? `${expectedRaw}-15` : "";
+    if (!childMonths.length && !expectedDate) continue;
+
+    try {
+      const report = await runPythonWorkflow(
+        buildFamilyWorkflowInput({ region: profile.region || "", household: profile.household, childMonths, expectedDate }),
+        null,
+        { enable_ai_answer: false, enable_critic: false, enable_live_law: false, enable_learning: false, write_audit: false },
+      );
+      const due = asArray(report.support_matches)
+        .map((s) => ({
+          name: asString(s.name),
+          amount_krw: Number(s.amount_krw ?? 0),
+          application_channel: asString(s.application_channel),
+          days_left: typeof s.deadline_days_left === "number" ? s.deadline_days_left : null,
+        }))
+        .filter((s) => s.days_left !== null && s.days_left >= 0 && s.days_left <= within)
+        .sort((a, b) => (a.days_left ?? 0) - (b.days_left ?? 0));
+      if (due.length) targets.push({ nickname: user.nickname, email: user.email, region: profile.region, due });
+    } catch {
+      // 한 명이 실패해도 나머지 발송 목록은 나와야 한다. 누가 빠졌는지만 알려준다.
+      failed.push(user.email);
+    }
+  }
+
+  return res.json({
+    status: "success",
+    within_days: within,
+    checked: users.length,
+    data: targets,
+    ...(failed.length ? { failed } : {}),
+  });
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -943,6 +1070,36 @@ async function fetchGovernmentSupports(region: string, lifeStages: string[]): Pr
   }));
 }
 
+/** 가족 프로필 → 파이썬 워크플로우 입력.
+ *
+ * `/api/briefing`(부모 본인 요청)과 `/api/ops/reminders`(운영자 주간 발송 대상)가 같은
+ * 계산을 해야 한다 — 화면에 보이는 D-day와 형님이 문자로 보내는 D-day가 다르면 신뢰가 깨진다.
+ * 그래서 입력 조립을 여기 한 곳에 둔다. */
+function buildFamilyWorkflowInput(input: {
+  region: string;
+  household?: string;
+  childMonths: string[];
+  expectedDate: string;
+}): JsonRecord {
+  const { region, household, childMonths, expectedDate } = input;
+  const parents = household === "single-caregiver"
+    ? [{ role: "mother", employment: "정규직" }]
+    : [{ role: "mother", employment: "정규직" }, { role: "father", employment: "정규직" }];
+  const children: JsonRecord[] = childMonths.map((m, i) => ({ name_masked: `C${i + 1}`, birth_date: `${m}-15` }));
+  if (household === "expecting" && expectedDate) {
+    children.push({ name_masked: `C${children.length + 1}`, expected_birth_date: expectedDate });
+  }
+  return {
+    persona: "P1",
+    reference_date: new Date().toISOString().slice(0, 10),
+    region,
+    parents,
+    children,
+    ...(household ? { flags: [household] } : {}),
+    scenario: { type: "general", query: "", data: {} },
+  };
+}
+
 app.post("/api/briefing", rateLimit, async (req, res) => {
   const body = (req.body ?? {}) as {
     birthMonth?: string; // 구버전 호환
@@ -972,23 +1129,7 @@ app.post("/api/briefing", rateLimit, async (req, res) => {
     return res.status(400).json({ status: "error", message: "아이 출생 연월 또는 출산 예정일을 입력해 주세요." });
   }
 
-  const parents = household === "single-caregiver"
-    ? [{ role: "mother", employment: "정규직" }]
-    : [{ role: "mother", employment: "정규직" }, { role: "father", employment: "정규직" }];
-  const children: JsonRecord[] = childMonths.map((m, i) => ({ name_masked: `C${i + 1}`, birth_date: `${m}-15` }));
-  if (expecting && expectedDate) {
-    children.push({ name_masked: `C${children.length + 1}`, expected_birth_date: expectedDate });
-  }
-
-  const rawInput: JsonRecord = {
-    persona: "P1",
-    reference_date: new Date().toISOString().slice(0, 10),
-    region,
-    parents,
-    children,
-    ...(household ? { flags: [household] } : {}),
-    scenario: { type: "general", query: "", data: {} },
-  };
+  const rawInput = buildFamilyWorkflowInput({ region, household, childMonths, expectedDate });
 
   if (process.env.JARAMLAW_DISABLE_PYTHON_BRIDGE === "1" || !fs.existsSync(PYTHON_SRC)) {
     return res.status(503).json({ status: "error", message: "python_bridge_unavailable" });
