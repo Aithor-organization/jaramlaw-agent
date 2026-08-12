@@ -14,7 +14,7 @@
 import pytest
 
 from jaramlaw_agent.adversarial_critic import BLOCKING_CODES, critique_answer
-from jaramlaw_agent.models import LawArticle
+from jaramlaw_agent.models import LawArticle, LegalBasis, SupportMatch
 from jaramlaw_agent.openrouter_client import OpenRouterClient, OpenRouterError
 
 
@@ -144,17 +144,35 @@ def test_family_profile_is_never_sent_to_third_party():
         }
 
     client._post = capture  # type: ignore[method-assign]
+    # 지원제도까지 넘긴 상태로 검증한다. 지원제도에는 자격 판정 근거가 붙어 있고
+    # 그 값은 이 가정의 프로필에서 파생되므로, 여기가 새로 생긴 유출 경로다.
+    support = SupportMatch(
+        support_id="child-allowance",
+        name="아동수당",
+        amount_krw=100000,
+        amount_description="월 10만원",
+        condition_summary="만 8세 미만",
+        legal_basis=LegalBasis(law="아동수당법", article="제4조", effective_date="2022-04-01"),
+        application_channel="정부24",
+        eligibility_evidence=["자녀 월령 30개월 → 0~95개월 구간", "birth_date 2019-08-10 기준"],
+    )
     verdict = critique_answer(
-        question="학원비 환불 문의", answer="답변입니다", laws=_laws(), client=client
+        question="학원비 환불 문의", answer="답변입니다", laws=_laws(),
+        supports=[support], client=client,
     )
 
     payload = captured["payload"]
     # 가족 프로필은 비평가 프롬프트에 애초에 들어가지 않는다 (구조적으로 전달 안 함).
     for leak in ("2019-08-10", "birth_date", "life_stages", "region_code", "dual_income"):
         assert leak not in payload
+    # 지원제도의 자격 판정 근거도 프로필 파생이므로 나가면 안 된다.
+    assert "자격 판정 근거" not in payload
+    assert "30개월" not in payload
+    # 반면 판정에 필요한 근거는 그대로 가야 한다 — 좁으면 정상 답변이 차단된다.
+    assert "아동수당법 제4조" in payload
 
     # 무엇을 보냈는지 리포트에 남긴다 — 감사 가능해야 한다.
-    assert verdict.sent_fields == ["question(masked)", "ai_answer", "law_context"]
+    assert verdict.sent_fields == ["question(masked)", "ai_answer", "law_context", "support_context"]
 
 
 # --- 판정이 실제로 무언가를 막는가 (핵심) ---------------------------------

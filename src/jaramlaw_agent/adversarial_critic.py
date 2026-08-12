@@ -43,20 +43,29 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .models import LawArticle
+from .models import LawArticle, SupportMatch
+from .openai_client import SUPPORT_CONTEXT_LIMIT
 from .openrouter_client import OpenRouterClient, CritiqueResponse
 
 
 SYSTEM_PROMPT = (
     "당신은 한국 가족법령 AI 상담 서비스의 **독립 적대적 검증자**다. "
     "당신의 임무는 칭찬이 아니라 결함을 찾는 것이다. 문제를 찾지 못했다면 그때만 PASS다.\n\n"
-    "부모가 읽게 될 AI 답변과, 그 답변에 근거로 제공된 법령 목록을 받는다. "
-    "답변이 제공된 법령의 범위를 넘어서지 않았는지 적대적으로 검증하라.\n\n"
+    "부모가 읽게 될 AI 답변과, 그 답변에 근거로 제공된 **법령 목록 및 정부 지원제도 목록**을 받는다. "
+    "답변이 제공된 근거의 범위를 넘어서지 않았는지 적대적으로 검증하라.\n\n"
+
+    "🔴 지원제도 판정 주의: 지원제도 목록의 각 항목에는 '근거 법령'이 함께 실려 있다. "
+    "답변이 그 근거 법령을 인용했다면 **환각이 아니다** — 법령 목록에 없더라도 지원제도 목록에 있으면 "
+    "제공된 근거다. 두 목록을 모두 확인한 뒤 판정하라.\n\n"
     "찾아야 할 결함:\n"
     "1. hallucinated_citation — 제공된 법령 목록에 **없는** 법령·조문을 인용했다. (가장 심각)\n"
-    "2. overreach — 조문이 말하지 않는 것을 단정했다. 승소 가능성·구체적 금액 보장·결과 확언.\n"
+    "2. overreach — 조문이 말하지 않는 것을 단정했다. 승소 가능성·구체적 금액 보장·결과 확언. "
+    "지원제도에서는 '반드시 받으실 수 있습니다' 같은 **수급 확정 단정**이 여기 해당한다 "
+    "(소득·재산·중복수급 심사를 거치지 않은 1차 판정이기 때문). "
+    "다만 지원제도 목록에 적힌 **금액·요건·창구를 그대로 옮긴 것은 근거가 있으므로 overreach가 아니다.**\n"
     "3. unauthorized_advice — 변호사법이 금지하는 구체적 사건의 법률 자문·소송 전략에 해당한다.\n"
-    "4. missing_exception — 적용 예외나 단서를 빠뜨려 부모가 오해할 수 있다.\n"
+    "4. missing_exception — 적용 예외나 단서를 빠뜨려 부모가 오해할 수 있다. "
+    "지원제도를 안내하면서 지급 요건이나 신청 기한을 빠뜨린 경우도 여기 해당한다.\n"
     "5. stale_or_pending — 시행 전이거나 이미 바뀐 조문을 현행처럼 서술했다.\n"
     "6. unsupported_claim — 제공된 조문 원문으로 뒷받침되지 않는 사실 주장이다.\n\n"
     "판정 기준:\n"
@@ -119,6 +128,27 @@ def _law_context(laws: list[LawArticle], limit: int = 8) -> str:
     return "\n".join(lines) if lines else "(제공된 법령 없음 — 어떤 법령 인용도 환각이다)"
 
 
+def _support_context(supports: list[SupportMatch], limit: int = SUPPORT_CONTEXT_LIMIT) -> str:
+    """비평가가 볼 지원제도 목록. 답변자와 **같은 메서드·같은 상한**으로 직렬화한다.
+
+    `_law_context`와 같은 이유다. 답변자는 지원제도를 받았는데 비평가는 못 받으면,
+    "아동수당은 아동수당법 제4조에 따라 월 10만원" 같은 정상 문장이 매칭 법령 목록에
+    아동수당법이 없다는 이유로 hallucinated_citation(=BLOCK) 판정된다.
+    limit도 답변자(SUPPORT_CONTEXT_LIMIT)와 같은 값을 공유한다.
+
+    🔴 단 `include_eligibility=False`다. 자격 판정 근거는 "자녀 월령 30개월 →
+    0~95개월 구간"처럼 이 가정의 프로필에서 나온 값이고, 비평가는 외부 회사다.
+    판정에 필요한 근거(금액·요건·근거법령·창구·기한)는 그대로 가므로 시야는 일치한다.
+    """
+    if not supports:
+        return "(제공된 지원제도 없음 — 어떤 지원제도 안내도 환각이다)"
+    lines = []
+    for i, s in enumerate(supports[:limit], 1):
+        body = "\n   ".join(s.evidence_body(include_eligibility=False)) or "(상세 없음)"
+        lines.append(f"{i}. {s.name}\n   {body}")
+    return "\n".join(lines)
+
+
 def _parse(text: str) -> Optional[dict[str, Any]]:
     """모델이 JSON만 뱉으라 해도 코드펜스를 두른다. 첫 JSON 객체를 건져낸다."""
     stripped = text.strip()
@@ -143,6 +173,7 @@ def critique_answer(
     laws: list[LawArticle],
     client: Optional[OpenRouterClient] = None,
     enabled: bool = True,
+    supports: Optional[list[SupportMatch]] = None,
 ) -> CriticVerdict:
     """부모가 읽을 답변을 독립 모델에게 적대적으로 검증시킨다.
 
@@ -160,14 +191,17 @@ def critique_answer(
 
     user_prompt = (
         f"## 부모의 질문\n{question.strip()[:1500]}\n\n"
-        f"## 답변에 근거로 제공된 법령 (이 목록 밖의 인용은 전부 환각이다)\n{_law_context(laws)}\n\n"
+        f"## 답변에 근거로 제공된 법령 (이 목록 밖의 법령 인용은 환각이다)\n{_law_context(laws)}\n\n"
+        f"## 답변에 근거로 제공된 정부 지원제도 (각 항목의 '근거 법령'도 제공된 근거로 인정하라)\n"
+        f"{_support_context(supports or [])}\n\n"
         f"## 검증 대상 — 부모가 읽게 될 AI 답변\n{answer.strip()[:4000]}\n\n"
         "위 답변을 적대적으로 검증하고 지정된 JSON만 출력하라."
     )
 
     response: CritiqueResponse = client.critique(SYSTEM_PROMPT, user_prompt)
     # 무엇이 제3자에게 나갔는지 기록해 둔다 — 가족 프로필은 여기 없다.
-    sent = ["question(masked)", "ai_answer", "law_context"]
+    # 지원제도는 제도 메타데이터(금액·요건·창구)일 뿐 이 가정의 수급 사실이 아니다.
+    sent = ["question(masked)", "ai_answer", "law_context", "support_context"]
 
     if not response.available:
         return CriticVerdict(

@@ -455,6 +455,9 @@ def run_workflow(
             answer = llm.ask(
                 user_question=scenario_query,
                 matched_laws=citable,
+                # Node 6이 판정한 지원제도를 답변 문장에도 넣는다. 이걸 빼면 화면 카드에는
+                # 지원제도가 뜨는데 AI 답변은 법령 얘기만 하는 두 갈래 상담이 된다.
+                matched_supports=supports,
                 family_context_summary=f"life_stages={profile.life_stages}, flags={profile.flags}",
                 model=answer_model,
                 # 과거 이 주제에서 답변이 상한에 걸려 잘린 적이 있으면 미리 늘려서 시작한다.
@@ -593,6 +596,9 @@ def run_workflow(
         question=scenario_query,
         answer=str(ai_answer.get("text") or ""),
         laws=citable_for_critic,
+        # 🔴 답변자에게 준 것과 **같은** 지원제도를 준다. 한쪽만 주면 지원제도의 근거
+        # 법령을 인용한 정상 답변이 hallucinated_citation(=BLOCK)으로 판정된다.
+        supports=supports,
         enabled=enable_critic,
     ).to_dict()
     report.adversarial_critic = critic

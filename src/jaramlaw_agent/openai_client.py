@@ -21,7 +21,13 @@ from . import DISCLAIMER
 from .agentshield_bridge import resilient_call
 from .config import Config, redact_secret
 from .model_routing import select_model
-from .models import LawArticle
+from .models import LawArticle, SupportMatch
+
+
+# 답변 컨텍스트에 실을 지원제도 개수 상한. 법령 8건과 같은 이유로 상한이 필요하고,
+# 비평가(adversarial_critic._support_context)도 **같은 값**을 써야 한다 —
+# 비평가 쪽이 좁으면 9번째 제도를 안내한 정상 답변이 환각으로 차단된다.
+SUPPORT_CONTEXT_LIMIT = 8
 
 
 SYSTEM_PROMPT = (
@@ -40,6 +46,13 @@ SYSTEM_PROMPT = (
     "   - 가정폭력: 1366\n"
     "4. 자동 신고 발사 금지 — 신고서·신청서는 '초안'임을 명시한다.\n"
     "5. 미성년 PII — 아이 실명·주민번호 노출 금지.\n\n"
+
+    "정부 지원제도 규칙:\n"
+    "6. 컨텍스트에 '받을 수 있는 정부 지원제도'가 제공되면, 질문과 관련된 것을 답변에 함께 안내한다. "
+    "목록에 없는 제도는 만들어내지 않는다.\n"
+    "7. 수급을 단정하지 않는다 — 이 목록은 입력된 가족 정보로 판정한 결과일 뿐, 소득·재산·중복수급 심사는 "
+    "거치지 않았다. '요건에 해당해 보입니다. 최종 확인은 신청 창구에서' 형태로 쓰고, 지급 요건을 함께 밝힌다.\n"
+    "8. 신청 기한이 표시된 제도는 기한을 함께 알린다.\n\n"
 
     "응답 형식:\n"
     "- 한국어로 답한다.\n"
@@ -216,6 +229,33 @@ class OpenAiClient:
         )
         return "\n".join(lines)
 
+    def _build_support_block(self, matched_supports: list[SupportMatch]) -> str:
+        """결정론 매칭된 정부 지원제도를 LLM context로 직렬화.
+
+        법령과 같은 원칙이다 — 직렬화는 `SupportMatch.evidence_body` 한 곳뿐이고,
+        비평가(adversarial_critic)가 같은 메서드를 쓰므로 양쪽 시야가 항상 일치한다.
+
+        빈 목록이면 블록 자체를 넣지 않는다. "지원제도 없음"이라고 쓰면 모델이 굳이
+        없다고 언급하게 되는데, 매칭 0건은 '해당 없음'이지 '존재하지 않음'이 아니다.
+        """
+        if not matched_supports:
+            return ""
+        lines = ["## 받을 수 있는 정부 지원제도 (컨텍스트 — 이 목록 외 제도 안내 금지)\n"]
+        for i, s in enumerate(matched_supports[:SUPPORT_CONTEXT_LIMIT], 1):
+            lines.append(f"### {i}. {s.name}")
+            lines.extend(s.evidence_body())
+            lines.append("")
+        lines.append(
+            "지원제도 사용 규칙:\n"
+            "- 위 목록은 입력된 가족 정보에 규칙을 적용한 **1차 판정**이다. 소득·재산·중복수급 심사는 "
+            "거치지 않았으므로 '받으실 수 있습니다'로 단정하지 마라. '요건에 해당해 보인다'로 쓰고 "
+            "지급 요건을 함께 밝혀라.\n"
+            "- 금액·요건·신청 창구는 위에 적힌 값만 쓴다. 기억에 의존해 다른 금액을 말하지 마라.\n"
+            "- 신청 기한(D-n)이 있으면 반드시 언급하라 — 놓치면 되돌릴 수 없는 정보다.\n"
+            "- 여기 실린 '근거 법령'은 그 제도의 출처다. 법령 자체를 해석·확대하지는 마라."
+        )
+        return "\n".join(lines)
+
     def classify(self, instruction: str, text: str, model: Optional[str] = None, max_tokens: int = 200) -> Optional[str]:
         """라벨 하나만 받아오는 초저비용 호출.
 
@@ -249,10 +289,14 @@ class OpenAiClient:
         temperature: float = 0.2,
         max_tokens: int = DEFAULT_ANSWER_MAX_TOKENS,
         model: Optional[str] = None,
+        matched_supports: Optional[list[SupportMatch]] = None,
     ) -> LlmAnswer:
-        """사용자 질문 + 매칭 법령 컨텍스트 → LLM 답변.
+        """사용자 질문 + 매칭 법령·지원제도 컨텍스트 → LLM 답변.
 
         Constitution 원칙 2 강제: matched_laws 컨텍스트 외 법령 인용 금지.
+        `matched_supports`는 Node 6(support_matching)의 결정론 판정 결과다. 이걸 넣지
+        않으면 화면 카드에는 지원제도가 뜨는데 답변 문장은 법령 얘기만 하는,
+        두 갈래로 갈린 상담이 된다.
         `model`은 호출자가 국면에 맞게 고른다 (model_routing.select_model).
         """
         chosen = model or self.model
@@ -260,13 +304,20 @@ class OpenAiClient:
             return LlmAnswer(text="(LLM disabled — OPENAI_API_KEY 미설정)", model=chosen, error="not_configured")
 
         context_block = self._build_context_block(matched_laws or [])
+        support_block = self._build_support_block(matched_supports or [])
         family_block = f"\n## 가족 정보 (요약, PII 마스킹됨)\n{family_context_summary}\n" if family_context_summary else ""
+        support_section = f"\n{support_block}\n" if support_block else ""
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"{context_block}\n{family_block}\n## 사용자 질문\n{user_question}\n\n위 컨텍스트만 인용하여 답하라. 컨텍스트 외 법령은 '확실하지 않음' 답."
+                "content": (
+                    f"{context_block}\n{support_section}{family_block}\n"
+                    f"## 사용자 질문\n{user_question}\n\n"
+                    "위 컨텍스트만 인용하여 답하라. 컨텍스트 외 법령은 '확실하지 않음' 답. "
+                    "지원제도는 위 목록에 있는 것만 안내하고, 수급을 단정하지 마라."
+                ),
             },
         ]
         # gpt-5.x 계열은 max_tokens/temperature를 거부한다 (max_completion_tokens 사용).

@@ -195,6 +195,43 @@ class SupportMatch:
     eligibility_evidence: list[str] = field(default_factory=list)
     notes: Optional[str] = None
 
+    def evidence_body(self, *, include_eligibility: bool = True) -> list[str]:
+        """답변 모델과 비평 모델이 **똑같이** 보는 지원제도 근거.
+
+        `LawArticle.evidence_body`와 같은 이유로 한 곳에만 둔다. 비평가의 판정 규칙이
+        "제공 목록에 없으면 환각"이므로, 답변자가 본 것보다 좁은 시야로 비평하면
+        정상 답변이 차단된다. 2026-08-06 실측으로 법령 쪽에서 이미 한 번 터진 함정이다
+        (상담 3/3 BLOCK, 사유 전부 "제공 목록에 원문이 없다").
+
+        지원제도는 **근거 법령을 함께 싣는다.** 답변이 "아동수당법 제4조에 따라 월 10만원"
+        이라고 쓸 때, 그 법이 매칭 법령 목록에 없더라도 여기 실려 있으면 비평가가
+        환각으로 오판하지 않는다.
+
+        🔴 `include_eligibility=False`는 **비평가 전용**이다. `eligibility_evidence`는
+        "자녀 월령 30개월 → 0~95개월 구간"처럼 이 가정의 프로필에서 파생된 값이라,
+        외부 회사(xAI/Anthropic)로 나가는 비평 프롬프트에 실으면 "가족 프로필은
+        제3자에게 보내지 않는다"는 정책이 깨진다. 비평가는 "이 제도가 제공된 근거인가"만
+        알면 되고 "왜 이 가정이 자격이 되는가"는 알 필요가 없다 — 판정에 쓰는 부분
+        (금액·요건·근거법령·창구·기한)은 양쪽이 동일하므로 시야 일치는 유지된다.
+        """
+        lines = [f"- 지급액: {self.amount_description or f'{self.amount_krw:,}원'}"]
+        if self.condition_summary:
+            lines.append(f"- 지급 요건: {self.condition_summary}")
+        if self.legal_basis.is_complete():
+            lines.append(
+                f"- 근거 법령: {self.legal_basis.law} {self.legal_basis.article} "
+                f"(시행 {self.legal_basis.effective_date})"
+            )
+        if self.application_channel:
+            lines.append(f"- 신청 창구: {self.application_channel}")
+        if self.deadline_days_left is not None:
+            lines.append(f"- 신청 기한: D-{self.deadline_days_left} (기한 종류: {self.deadline_kind or '미지정'})")
+        if include_eligibility and self.eligibility_evidence:
+            lines.append(f"- 자격 판정 근거: {'; '.join(self.eligibility_evidence)}")
+        if self.notes:
+            lines.append(f"- 비고: {self.notes}")
+        return lines
+
 
 @dataclass
 class RightsCard:
